@@ -9,7 +9,8 @@ var message = require('./message');
 var win = require('./win');
 var events = require('./events');
 
-var MAX_LENGTH = 1024 * 6;
+// var MAX_LENGTH = 1024 * 6;
+var MAX_LENGTH = Infinity;
 
 function showFrames() {
   events.trigger('showFrames');
