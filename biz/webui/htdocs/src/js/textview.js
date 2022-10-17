@@ -1,9 +1,11 @@
 var React = require('react');
 var ReactDOM = require('react-dom');
 
+const storage = require('../js/storage.js');
 var MonacoLoader = require('./components/editor/MonacoLoader.js').default;
 var MonacoUtil = require('./components/editor/MonacoUtil.js').default;
 
+// ReactClassComponent
 var TextView = React.createClass({
   componentDidMount: async function () {
 
@@ -15,14 +17,32 @@ var TextView = React.createClass({
     monacoUtil.addLogTheme();
     monacoUtil.enableTimeFormatProvider();
 
-    var container = ReactDOM.findDOMNode(this.refs.container);
+    const KEY_CONFIG = '__textview_config__';
+    this.config = {
+      readOnly: false,
+      fontSize: 16,
+      language: 'json',
+      wordWrap: 'on',
+      showFoldingControls: 'mouseover',
+      folding: true,
+      minimap: true
+    };
+    try {
+      this.config = JSON.parse(storage.get(KEY_CONFIG)) || this.config;
+    } catch (ignore) { }
+
+    const updateConfig = () => {
+      storage.set(KEY_CONFIG, JSON.stringify(this.config));
+    };
+
+    /** @type{HTMLDivElement} */
+    const container = ReactDOM.findDOMNode(this.refs.container);
     let editor = monaco.editor.create(container, {
       roundedSelection: false,
       scrollBeyondLastLine: false,
       renderWhitespace: true,
       dragAndDrop: true,
       automaticLayout: true,
-      wordWrap: 'on',
       bracketPairColorization: {
         enabled: true
       }
@@ -32,11 +52,48 @@ var TextView = React.createClass({
     monacoUtil.addActions(editor);
     monacoUtil.addAppActions(editor);
 
+    monaco.editor.setModelLanguage(editor.getModel(), this.config.language);
+    editor.updateOptions({
+      readOnly: this.config.readOnly,
+      fontSize: this.config.fontSize,
+      wordWrap: this.config.wordWrap,
+      showFoldingControls: this.config.showFoldingControls,
+      folding: this.config.folding
+    });
+    const minimap = editor.getOption(monaco.editor.EditorOption.minimap);
+    minimap.enabled = this.config.minimap;
+    editor.updateOptions({ minimap: minimap });
+
+    editor.onDidChangeModelLanguage(e => {
+      this.config.language = e.newLanguage;
+      updateConfig();
+    });
+
+    editor.onDidChangeConfiguration(() => {
+      this.config.readOnly = editor.getOption(monaco.editor.EditorOption.readOnly);
+      this.config.fontSize = editor.getOption(monaco.editor.EditorOption.fontSize);
+      this.config.wordWrap = editor.getOption(monaco.editor.EditorOption.wordWrap);
+      this.config.showFoldingControls = editor.getOption(monaco.editor.EditorOption.showFoldingControls);
+      this.config.folding = editor.getOption(monaco.editor.EditorOption.folding);
+      this.config.minimap = editor.getOption(monaco.editor.EditorOption.minimap).enabled;
+      updateConfig();
+    });
+
     var textarea = ReactDOM.findDOMNode(this.refs.textarea);
     textarea.style.display = 'none';
 
     this.props_value = this.props.value;
     editor.setValue(this.props_value);
+
+    this.fullscreen = false;
+    container.addEventListener('keydown', (ev) => {
+      if (ev.key == 'F2') {
+        ev.preventDefault();
+        ev.stopPropagation();
+        this.fullscreen = !this.fullscreen;
+        this.forceUpdate();
+      }
+    });
   },
   componentDidUpdate: function () {
     this.updateValue();
@@ -85,10 +142,11 @@ var TextView = React.createClass({
     }, 360);
   },
   render: function () {
+    let fullscreen = this.fullscreen;
     return (
       <div ref="container"
         style={{ display: '-webkit-box' }}
-        className={this.props.className || ''}
+        className={`${this.props.className || ''} ${fullscreen ? 'textview-fullscreen' : ''}`}
       >
         <textarea
           ref="textarea"

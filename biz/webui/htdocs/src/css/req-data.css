@@ -330,3 +330,8 @@
   font-style: italic;
   font-weight: normal!important;
 }
+
+.w-req-data-item:hover{
+  background-color: #ccc;
+  filter: hue-rotate(90deg);
+}

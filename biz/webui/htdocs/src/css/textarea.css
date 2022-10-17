@@ -90,3 +90,15 @@ a.w-textview-tips {
 a.w-textview-tips:hover {
   text-decoration: underline;
 }
+
+.textview-fullscreen{
+  border: #ff9f30 10px solid;
+  position: fixed;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 3000;
+  height: auto!important;
+  border-radius: 0.5em;
+}
