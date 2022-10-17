@@ -1,6 +1,7 @@
 var webpack = require('webpack');
 var path = require('path');
 
+/** @type{webpack.WebpackOptionsNormalized} */
 module.exports = {
   entry: {
     index: path.join(__dirname, './js/index')
@@ -9,7 +10,6 @@ module.exports = {
     path: path.join(__dirname, '../js'),
     filename: '[name].js'
   },
-  // development
   mode: process.env.NODE_ENV || 'production',
   module: {
     rules: [
@@ -36,7 +36,7 @@ module.exports = {
   plugins: [
     new webpack.DefinePlugin({
       'process.env': {
-        NODE_ENV: '"production"'
+        NODE_ENV: JSON.stringify(process.env.NODE_ENV)
       }
     })
   ]

@@ -50,6 +50,7 @@
         "allowEmptyCatch": true
       }
     ],
-    "no-cond-assign": "off"
+    "no-cond-assign": "off",
+    "no-control-regex": "off"
   }
 }

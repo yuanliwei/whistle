@@ -22,6 +22,7 @@ var TextView = React.createClass({
       renderWhitespace: true,
       dragAndDrop: true,
       automaticLayout: true,
+      wordWrap: 'on',
       bracketPairColorization: {
         enabled: true
       }
