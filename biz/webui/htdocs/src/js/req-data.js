@@ -302,7 +302,7 @@ var Row = React.createClass({
     var item = p.item;
     var style = item.style;
     return (
-      <table className="table" key={p.key} style={p.style}>
+      <table className="table w-req-item" key={p.key} style={p.style}>
         <tbody>
           <tr
             tabIndex="-1"

@@ -331,7 +331,12 @@
   font-weight: normal!important;
 }
 
-.w-req-data-item:hover{
-  background-color: #ccc;
-  filter: hue-rotate(90deg);
+.w-req-item:hover::after {
+  background-color: rgba(0, 255, 85, 0.1);
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 1px;
 }
