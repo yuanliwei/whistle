@@ -321,8 +321,14 @@ var List = React.createClass({
       this.setState({
         selectedItem: item
       });
-      if (!hasChanged) {
-        events.trigger('updateGlobal');
+      if(this.props.onChange){
+        clearTimeout(this.timer);
+        this.timer = setTimeout(() => {
+          this.props.onChange();
+        }, 300);
+        if (!hasChanged) {
+          events.trigger('updateGlobal');
+        }     
       }
     }
   },

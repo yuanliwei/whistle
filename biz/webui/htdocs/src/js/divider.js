@@ -67,7 +67,9 @@ var Divider = React.createClass({
   },
   render: function () {
     var vertical = util.getBoolean(this.props.vertical);
-    var divider = <div className="w-divider"></div>;
+    let size = this.props.size || '0px';
+    let color = this.props.color || '';
+    var divider = <div className="w-divider" style={{minHeight:size, minWidth:size, background:color}}></div>;
     var hideLeft = this.props.hideLeft;
     var hideRight = this.props.hideRight;
     var leftWidth = parseInt(this.props.leftWidth, 10);

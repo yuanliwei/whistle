@@ -29,6 +29,7 @@ var ContextMenu = require('./context-menu');
 var CertsInfoDialog = require('./certs-info-dialog');
 var SyncDialog = require('./sync-dialog');
 var win = require('./win');
+var Divider = require('./divider');
 
 var H2_RE = /http\/2\.0/i;
 var JSON_RE = /^\s*(?:[\{｛][\w\W]+[\}｝]|\[[\w\W]+\])\s*$/;
@@ -2808,24 +2809,24 @@ var Index = React.createClass({
     var self = this;
     var state = self.state;
     var list;
-    var isRules = state.name == 'rules';
-    if (isRules) {
-      list = state.rules.getChangedList();
-      if (list.length) {
-        list.forEach(function (item) {
-          self.selectRules(item);
-        });
-        self.setState({});
-      }
-    } else {
-      list = state.values.getChangedList();
-      if (list.length) {
-        list.forEach(function (item) {
-          self.saveValues(item);
-        });
-        self.setState({});
-      }
+    // var isRules = state.name == 'rules';
+    // if (isRules) {
+    list = state.rules.getChangedList();
+    if (list.length) {
+      list.forEach(function (item) {
+        self.selectRules(item);
+      });
+      self.setState({});
     }
+    // } else {
+    list = state.values.getChangedList();
+    if (list.length) {
+      list.forEach(function (item) {
+        self.saveValues(item);
+      });
+      self.setState({});
+    }
+    // }
   },
   onClickMenu: function (e) {
     var target = $(e.target).closest('a');
@@ -4187,36 +4188,41 @@ var Index = React.createClass({
               <i className="w-left-menu-name">Plugins</i>
             </a>
           </div>
-          {state.hasRules ? (
-            <List
-              ref="rules"
-              disabled={disabledAllRules}
-              theme={rulesTheme}
-              lineWrapping={autoRulesLineWrapping}
-              fontSize={rulesFontSize}
-              lineNumbers={showRulesLineNumbers}
-              onSelect={this.selectRules}
-              onUnselect={this.unselectRules}
-              onActive={this.activeRules}
-              modal={state.rules}
-              hide={name == 'rules' ? false : true}
-              name="rules"
-            />
-          ) : undefined}
-          {state.hasValues ? (
-            <List
-              theme={valuesTheme}
-              onDoubleClick={this.showEditValuesByDBClick}
-              fontSize={valuesFontSize}
-              lineWrapping={autoValuesLineWrapping}
-              lineNumbers={showValuesLineNumbers}
-              onSelect={this.saveValues}
-              onActive={this.activeValues}
-              modal={state.values}
-              hide={name == 'values' ? false : true}
-              className="w-values-list"
-              foldGutter={state.foldGutter}
-            />
+          {state.hasRules || state.hasValues ? (
+            <Divider 
+              vertical={true} 
+              // size='100px'
+              color='pink'
+              hide={(name == 'rules' || name =='values') ? false : true}
+              >
+              <List
+                ref="rules"
+                disabled={disabledAllRules}
+                theme={rulesTheme}
+                lineWrapping={autoRulesLineWrapping}
+                fontSize={rulesFontSize}
+                lineNumbers={showRulesLineNumbers}
+                onSelect={this.selectRules}
+                onUnselect={this.unselectRules}
+                onActive={this.activeRules}
+                modal={state.rules}
+                onChange={()=>this.saveRulesOrValues()}
+                name="rules"
+              />
+              <List
+                theme={valuesTheme}
+                onDoubleClick={this.showEditValuesByDBClick}
+                fontSize={valuesFontSize}
+                lineWrapping={autoValuesLineWrapping}
+                lineNumbers={showValuesLineNumbers}
+                onSelect={this.saveValues}
+                onActive={this.activeValues}
+                modal={state.values}
+                onChange={()=>this.saveRulesOrValues()}
+                className="w-values-list"
+                foldGutter={state.foldGutter}
+              />
+            </Divider>
           ) : undefined}
           {state.hasNetwork ? (
             <Network
@@ -4799,3 +4805,11 @@ var Index = React.createClass({
 dataCenter.getInitialData(function (data) {
   ReactDOM.render(<Index modal={data} />, document.getElementById('container'));
 });
+
+if(process.env.NODE_ENV == 'development'){
+  document.addEventListener('visibilitychange', (e) => {
+    if(e.target.visibilityState == 'visible'){
+      location.reload();
+    }
+  });
+}
