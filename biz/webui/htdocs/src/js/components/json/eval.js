@@ -18,11 +18,11 @@ function evalJson(str) {
   if (!JSON_RE.test(str)) {
     return;
   }
-  with (ctx) {
+  //with (ctx) {
     try {
-      return eval('(' + str + ')');
+      return window['eval']('(' + str + ')');
     } catch (e) {}
-  }
+  //}
 }
 
 module.exports = evalJson;

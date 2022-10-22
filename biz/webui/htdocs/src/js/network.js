@@ -50,7 +50,7 @@ var Network = React.createClass({
         }
       })
       .on('keydown', function (e) {
-        if (e.keyCode === 123) {
+        if (e.key === 'F10') {
           if (!self.props.hide) {
             self.onDockChange();
           }

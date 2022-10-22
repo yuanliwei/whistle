@@ -44,7 +44,7 @@ var _getCollectionEntries = require('./getCollectionEntries');
 
 var _getCollectionEntries2 = _interopRequireDefault(_getCollectionEntries);
 
-var _JSONNode = require('./JSONNode');
+var _JSONNode = require('./Holder.js');
 
 var _JSONNode2 = _interopRequireDefault(_JSONNode);
 
@@ -98,7 +98,7 @@ function renderChildNodes(props, from, to) {
       var isCircular = circularCache.indexOf(value) !== -1;
 
       var node = _react2['default'].createElement(
-        _JSONNode2['default'],
+        _JSONNode2['default'].JSONNode,
         (0, _extends3['default'])(
           {},
           props,

@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="zh">
+
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="./vite.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>whistle + Vite</title>
+</head>
+
+<body style="overscroll-behavior-x: none;">
+  <div id="container" class="main"></div>
+  <script type="module">
+    window.process = { env: { NODE_ENV: 'development' } }
+    import 'webui/biz/webui/htdocs/src/js/index.js'
+  </script>
+</body>
+
+</html>

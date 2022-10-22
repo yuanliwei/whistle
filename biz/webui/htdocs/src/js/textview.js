@@ -2,8 +2,11 @@ var React = require('react');
 var ReactDOM = require('react-dom');
 
 const storage = require('../js/storage.js');
-var MonacoLoader = require('./components/editor/MonacoLoader.js').default;
-var MonacoUtil = require('./components/editor/MonacoUtil.js').default;
+var MonacoLoader = require('./components/editor/MonacoLoader.js');
+var MonacoUtil = require('./components/editor/MonacoUtil.js');
+
+MonacoLoader = MonacoLoader.default || MonacoLoader
+MonacoUtil = MonacoUtil.default || MonacoUtil
 
 // ReactClassComponent
 var TextView = React.createClass({

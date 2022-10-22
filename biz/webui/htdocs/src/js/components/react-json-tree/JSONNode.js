@@ -209,4 +209,6 @@ JSONNode.propTypes = {
   isCustomNode: _propTypes2['default'].func.isRequired
 };
 
+var holder = require('./Holder.js');
+holder.JSONNode = JSONNode
 exports['default'] = JSONNode;

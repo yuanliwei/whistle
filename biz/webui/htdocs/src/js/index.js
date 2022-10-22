@@ -4805,11 +4805,3 @@ var Index = React.createClass({
 dataCenter.getInitialData(function (data) {
   ReactDOM.render(<Index modal={data} />, document.getElementById('container'));
 });
-
-if(process.env.NODE_ENV == 'development'){
-  document.addEventListener('visibilitychange', (e) => {
-    if(e.target.visibilityState == 'visible'){
-      location.reload();
-    }
-  });
-}
