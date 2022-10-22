@@ -1,41 +1,41 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
 
 /**
  * @returns {import('vite').PluginOption}
  */
 function wrapperCJS() {
   let ignore = [
-    `'./files-dialog'`
-  ]
+    '\'./files-dialog\''
+  ];
   return {
     name: 'wrapperCJS',
     async transform(code, id) {
       if (id.split('?')[0].endsWith('.js')) {
         // wrapper cjs
-        let matches = code.match(/require\([^)]+\)/g) || []
+        let matches = code.match(/require\([^)]+\)/g) || [];
 
         if (matches.length == 0 && !code.includes('exports')) {
-          return code
+          return code;
         }
 
-        let arr = []
+        let arr = [];
         for (let i = 0; i < matches.length; i++) {
-          const match = matches[i]
-          const id = match.replace('require(', '').replace(')', '')
+          const match = matches[i];
+          const id = match.replace('require(', '').replace(')', '');
           if (ignore.includes(id)) {
-            continue
+            continue;
           }
-          arr.push({ name: `__import_key_${i}__`, id })
+          arr.push({ name: `__import_key_${i}__`, id });
         }
 
         return `
 
-${arr.map(o => `import ${o.name} from ${o.id}`).join('\n')}
+${arr.map(o => `import * as ${o.name} from ${o.id}`).join('\n')}
 
 function require(id){
   return {
-    ${arr.map(o => `${o.id}: ${o.name},`).join('\n')}
+    ${arr.map(o => `${o.id}: ${o.name}.default || ${o.name},`).join('\n')}
   }[id]
 }
 
@@ -59,10 +59,24 @@ if(exports.__esModule && !exports.default){
 }
 
 ${code.includes('export ') ? '' : 'export default exports'}
-          `
+          `;
       }
     }
-  }
+  };
+}
+
+/**
+ * @returns {import('vite').PluginOption}
+ */
+function fileloader(ext) {
+  return {
+    name: 'fileloader:'+ext,
+    async transform(code, id) {
+      if(id.endsWith('.md')){
+        return 'export default '+JSON.stringify(code);
+      }
+    }
+  };
 }
 
 // https://vitejs.dev/config/
@@ -81,6 +95,7 @@ export default defineConfig({
     }
   },
   plugins: [
+    fileloader('.md'),
     react({}),
     wrapperCJS()
   ]

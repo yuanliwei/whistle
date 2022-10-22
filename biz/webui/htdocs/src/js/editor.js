@@ -53,6 +53,11 @@ require('codemirror/addon/fold/comment-fold');
 
 var rulesHint = require('./rules-hint');
 var events = require('./events');
+const storage = require('../js/storage.js');
+const protocols = require('./protocols');
+
+let {load} = require('./components/editor/MonacoLoader.js');
+let {MonacoUtil} = require('./components/editor/MonacoUtil.js');
 
 var themes = [
   'default',
@@ -94,12 +99,12 @@ var Editor = React.createClass({
     return themes;
   },
   setMode: function (mode) {
-    if (/^(javascript|css|xml|rules|markdown)$/i.test(mode)) {
+    if (/^(javascript|css|xml|rules|markdown|json)$/i.test(mode)) {
       mode = RegExp.$1.toLowerCase();
-    } else if (/^(js|pac|jsx|json)$/i.test(mode)) {
+    } else if (/^(js|pac|jsx)$/i.test(mode)) {
       mode = 'javascript';
     } else if (/^(html|wtpl)$/i.test(mode)) {
-      mode = 'htmlmixed';
+      mode = 'html';
     } else if (/^md$/i.test(mode)) {
       mode = 'markdown';
     }
@@ -107,6 +112,9 @@ var Editor = React.createClass({
       this._mode = mode;
       if (this._editor) {
         this._editor.setOption('mode', mode);
+      }
+      if (this.editorMonaco) {
+        this.monaco.editor.setModelLanguage(this.editorMonaco.getModel(), mode);
       }
       if (this._foldGutter) {
         this._editor.setOption('foldGutter', false);
@@ -117,13 +125,16 @@ var Editor = React.createClass({
   },
   setValue: function (value) {
     value = this._value = value == null ? '' : value + '';
+    if (this.editorMonaco && this.editorMonaco.getValue() != value) {
+      this.editorMonaco.setValue(value);
+    }
     if (!this._editor || this._editor.getValue() == value) {
       return;
     }
     this._editor.setValue(value);
   },
   getValue: function () {
-    return this._editor ? '' : this._editor.getValue();
+    return this.editorMonaco ? '' : this.editorMonaco.getValue();
   },
   setTheme: function (theme) {
     theme = this._theme = theme || DEFAULT_THEME;
@@ -200,12 +211,101 @@ var Editor = React.createClass({
   isRulesEditor: function () {
     return this.props.mode === 'rules' || this._mode === 'rules';
   },
-  componentDidMount: function () {
+  componentDidMount: async function () {
     var timeout;
     var self = this;
     var elem = ReactDOM.findDOMNode(self.refs.editor);
     var editor = (self._editor = CodeMirror(elem));
     var timer;
+
+    let monaco = await load();
+    let monacoUtil = new MonacoUtil(monaco);
+    monacoUtil.addLogTheme();
+    monacoUtil.enableTimeFormatProvider();
+    setupRulesTheme(monaco);
+    setupRulesCompletionItemProvider(monaco);
+    setupRulesDocmentItemProvider(monaco);
+
+    const KEY_CONFIG = '__textview_config__';
+    this.config = {
+      readOnly: false,
+      fontSize: 16,
+      wordWrap: 'on',
+      showFoldingControls: 'mouseover',
+      folding: true,
+      minimap: true
+    };
+    try {
+      this.config = JSON.parse(storage.get(KEY_CONFIG)) || this.config;
+    } catch (ignore) { }
+
+    const updateConfig = () => {
+      storage.set(KEY_CONFIG, JSON.stringify(this.config));
+    };
+
+    /** @type{HTMLDivElement} */
+    const container = ReactDOM.findDOMNode(this.refs.monaco);
+    let editorMonaco = monaco.editor.create(container, {
+      roundedSelection: false,
+      scrollBeyondLastLine: false,
+      renderWhitespace: true,
+      dragAndDrop: true,
+      theme: 'RulesEditorTheme',
+      automaticLayout: true,
+      bracketPairColorization: {
+        enabled: true
+      }
+    });
+    this.monaco = monaco;
+    this.editorMonaco = editorMonaco;
+
+    monacoUtil.enableDragDrop(container, editorMonaco);
+    monacoUtil.addActions(editorMonaco);
+    monacoUtil.addAppActions(editorMonaco);
+
+    editorMonaco.updateOptions({
+      readOnly: this.config.readOnly,
+      fontSize: this.config.fontSize,
+      wordWrap: this.config.wordWrap,
+      showFoldingControls: this.config.showFoldingControls,
+      folding: this.config.folding
+    });
+    const minimap = editorMonaco.getOption(monaco.editor.EditorOption.minimap);
+    minimap.enabled = this.config.minimap;
+    editorMonaco.updateOptions({ minimap: minimap });
+
+    monaco.editor.setModelLanguage(editorMonaco.getModel(), this._mode);
+    // editorMonaco.onDidChangeModelLanguage(e => {
+    //   this.config.language = e.newLanguage;
+    //   updateConfig();
+    // });
+
+    editorMonaco.onDidChangeConfiguration(() => {
+      this.config.readOnly = editorMonaco.getOption(monaco.editor.EditorOption.readOnly);
+      this.config.fontSize = editorMonaco.getOption(monaco.editor.EditorOption.fontSize);
+      this.config.wordWrap = editorMonaco.getOption(monaco.editor.EditorOption.wordWrap);
+      this.config.showFoldingControls = editorMonaco.getOption(monaco.editor.EditorOption.showFoldingControls);
+      this.config.folding = editorMonaco.getOption(monaco.editor.EditorOption.folding);
+      this.config.minimap = editorMonaco.getOption(monaco.editor.EditorOption.minimap).enabled;
+      updateConfig();
+    });
+
+    editorMonaco.onDidChangeModelContent(() => {
+      if (
+        typeof self.props.onChange == 'function' &&
+        editorMonaco.getValue() !== (self.props.value || '')
+      ) {
+        self.props.onChange.call(self, {getValue:()=>editorMonaco.getValue()});
+      }
+    });
+
+    editorMonaco.onMouseDown(({event, target})=>{
+      let token=target.element.textContent;
+      if(event.ctrlKey && token){
+        events.trigger('click-rules-token', token);
+      }
+    });
+
     events.on('updatePlugins', function() {
       if (self.isRulesEditor()) {
         timer && clearTimeout(timer);
@@ -222,6 +322,7 @@ var Editor = React.createClass({
                 self._waitingUpdate = false;
                 editor.setOption('mode', '');
                 editor.setOption('mode', 'rules');
+                setupRulesTheme(monaco);
               }
             }
           }, 600);
@@ -478,13 +579,178 @@ var Editor = React.createClass({
   },
   render: function () {
     return (
-      <div
-        tabIndex="0"
-        ref="editor"
-        className="fill orient-vertical-box w-list-content"
-      ></div>
+      <div 
+        className='fill orient-vertical-box w-list-content'
+        style={{
+          display:'flex',
+          flexDirection:'column'
+        }}
+      >
+        <div
+          tabIndex="0"
+          ref="editor"
+          style={{
+            // minHeight:'100px',
+            // flexGrow:'1'
+          }}
+          className="orient-vertical-box w-list-content"
+          ></div>
+          <div 
+            ref="monaco"
+            className="orient-vertical-box w-list-content"
+            style={{
+              background:'red',
+              minHeight:'300px',
+              flexGrow:'1'
+            }}></div>
+      </div>
     );
   }
 });
+
+function createDependencyProposals(monaco, range) {
+  let allRules = protocols.getAllRules();
+  var options = {
+    name: 'rules',
+    url: location.href
+  };
+  return allRules.map(o=>{
+    let helpUrl = rulesHint.getHelpUrlWithName(o.split(':')[0], options);
+    let doc = rulesHint.docMap[helpUrl.split('whistle/rules/')[1]] || '';
+    doc=doc.default||doc;
+    return {
+      label: o,
+      kind: monaco.languages.CompletionItemKind.Constant,
+      documentation: {
+        value: `# ${o} \n [${helpUrl}](${helpUrl})\n\n${doc}`,
+        isTrusted: true,
+        supportThemeIcons: true,
+        supportHtml: true
+      },
+      insertText: o,
+      range: range
+    };
+  });
+}
+
+let hasSetupRulesCompletionItemProvider = false;
+
+function setupRulesCompletionItemProvider(monaco){
+  if(hasSetupRulesCompletionItemProvider){
+    return;
+  }
+  hasSetupRulesCompletionItemProvider = true;
+  monaco.languages.registerCompletionItemProvider('rules', {
+    provideCompletionItems: function (model, position) {
+      var textUntilPosition = model.getValueInRange({
+        startLineNumber: 1,
+        startColumn: 1,
+        endLineNumber: position.lineNumber,
+        endColumn: position.column
+      });
+      var match = textUntilPosition.match(
+        / \w+$/
+      );
+      if (!match) {
+        return { suggestions: [] };
+      }
+      var word = model.getWordUntilPosition(position);
+      var range = {
+        startLineNumber: position.lineNumber,
+        endLineNumber: position.lineNumber,
+        startColumn: word.startColumn,
+        endColumn: word.endColumn
+      };
+      return {
+        suggestions: createDependencyProposals(monaco, range)
+      };
+    }
+  });
+}
+
+
+let hasSetupRulesDocmentItemProvider = false;
+
+function setupRulesDocmentItemProvider(monaco){
+  if(hasSetupRulesDocmentItemProvider){
+    return;
+  }
+  hasSetupRulesDocmentItemProvider = true;
+  const rulesDocmentItemProvider = {
+    provideHover(document, position) {
+      let token = document.getWordAtPosition(position);
+      if(!token?.word){
+        return;
+      }
+      var options = {
+        name: 'rules',
+        url: location.href
+      };
+      let helpUrl = rulesHint.getHelpUrlWithName(token.word, options);
+      let doc = rulesHint.docMap[helpUrl.split('whistle/rules/')[1]] || '';
+      if (doc) {
+        doc=doc.default||doc;
+        return {
+          contents: [{ value: `# ${token.word} \n [${helpUrl}](${helpUrl})\n\n${doc}` }]
+        };
+      } else {
+        return null;
+      }
+    }
+  };
+
+  monaco.languages.registerHoverProvider('rules', rulesDocmentItemProvider);
+}
+
+let hasSetupRulesTheme = false;
+let setupRulesThemeDisposable = false;
+
+function setupRulesTheme(monaco){
+  if(setupRulesThemeDisposable){
+    setupRulesThemeDisposable.dispose();
+  }
+
+  let allRules = protocols.getAllRules();
+  let regexp = new RegExp(allRules.map(o=>`(${o}{[\\w-_.,]+})`).join('|'));
+  setupRulesThemeDisposable = monaco.languages.setMonarchTokensProvider('rules', {
+    tokenizer: {
+      root: [
+            [regexp, 'rule-schema'],
+            [/\w+:\/\/{[\w-_.,]+}/, 'rule-schema-unknown'],
+            [/#.*/, 'rule-comment']
+      ]
+    }
+  });
+
+  if (hasSetupRulesTheme) {
+    return;
+  }
+  hasSetupRulesTheme = true;
+  monaco.languages.register({ id: 'rules', aliases: ['rules', 'whistle'] });
+  monaco.languages.setLanguageConfiguration('rules', {
+    comments:{
+      lineComment:'#'
+    },
+    autoClosingPairs:[
+      {
+        open:'{',
+        close:'}'
+      }
+    ]
+  });
+
+  monaco.editor.defineTheme('RulesEditorTheme', {
+    base: 'vs',
+    inherit: true,
+    rules: [
+            { token: 'rule-schema', foreground: '#229922', fontStyle: 'bold' },
+            { token: 'rule-schema-unknown', foreground: '#af2018', fontStyle: 'italic strikethrough' },
+            { token: 'rule-comment', foreground: '#999999' }
+    ],
+    colors: {
+      'editor.foreground': '#333333'
+    }
+  });
+}
 
 module.exports = Editor;

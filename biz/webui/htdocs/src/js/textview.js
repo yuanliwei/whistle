@@ -2,11 +2,8 @@ var React = require('react');
 var ReactDOM = require('react-dom');
 
 const storage = require('../js/storage.js');
-var MonacoLoader = require('./components/editor/MonacoLoader.js');
-var MonacoUtil = require('./components/editor/MonacoUtil.js');
-
-MonacoLoader = MonacoLoader.default || MonacoLoader
-MonacoUtil = MonacoUtil.default || MonacoUtil
+var {load} = require('./components/editor/MonacoLoader.js');
+var {MonacoUtil} = require('./components/editor/MonacoUtil.js');
 
 // ReactClassComponent
 var TextView = React.createClass({
@@ -15,7 +12,7 @@ var TextView = React.createClass({
     this.props_value = this.props.value;
     this.updateValue();
 
-    let monaco = await MonacoLoader.load();
+    let monaco = await load();
     let monacoUtil = new MonacoUtil(monaco);
     monacoUtil.addLogTheme();
     monacoUtil.enableTimeFormatProvider();

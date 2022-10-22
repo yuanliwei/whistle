@@ -30,6 +30,7 @@ var CertsInfoDialog = require('./certs-info-dialog');
 var SyncDialog = require('./sync-dialog');
 var win = require('./win');
 var Divider = require('./divider');
+var {load} = require('./components/editor/MonacoLoader.js');
 
 var H2_RE = /http\/2\.0/i;
 var JSON_RE = /^\s*(?:[\{｛][\w\W]+[\}｝]|\[[\w\W]+\])\s*$/;
@@ -1068,6 +1069,14 @@ var Index = React.createClass({
         }
       });
 
+    events.on('click-rules-token',(_,text)=>{
+      var name = getKey(text);
+      if (name) {
+        self.showAndActiveValues({ name: name });
+        return;
+      }
+    });
+
     if (self.state.name == 'network') {
       self.startLoadData();
     }
@@ -1526,6 +1535,9 @@ var Index = React.createClass({
         timeout = setTimeout(update, 3000);
       }
       if (document.hidden) {
+        return;
+      }
+      if(!self.__isMounted){
         return;
       }
       self.setState({}, function () {
@@ -4805,3 +4817,5 @@ var Index = React.createClass({
 dataCenter.getInitialData(function (data) {
   ReactDOM.render(<Index modal={data} />, document.getElementById('container'));
 });
+
+load();

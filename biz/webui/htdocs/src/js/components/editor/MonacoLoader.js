@@ -58,6 +58,6 @@ async function load() {
     return monacoPromise
 }
 
-export default {
+export {
     load
 }

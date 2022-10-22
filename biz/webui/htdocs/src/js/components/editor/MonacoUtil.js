@@ -1088,4 +1088,4 @@ async function loadTranslate() {
     return window['mstranslate']
 }
 
-export default MonacoUtil
+export {MonacoUtil}

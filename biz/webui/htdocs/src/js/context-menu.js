@@ -174,6 +174,9 @@ var ContextMenu = React.createClass({
     this.setState(data);
   },
   hide: function () {
+    if(!this.__isMounted){
+      return;
+    }
     this.setState({ visible: false });
   },
   update: function () {
