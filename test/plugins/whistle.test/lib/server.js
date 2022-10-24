@@ -41,8 +41,7 @@ function startHttpServer(app) {
 }
 
 function startWebsocketServer(ws) {
-  ws.on('connection', function(ws) {
-    var req = ws.upgradeReq;
+  ws.on('connection', function(ws, req) {
     ws.on('message', function(msg) {
       ws.send(JSON.stringify({
         url: util.getFullUrl(req),

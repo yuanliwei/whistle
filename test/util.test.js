@@ -40,7 +40,7 @@ function setHost(fullUrl, opts) {
     }
     fullUrl = fullUrl.replace(/\/\/[^/]+/, '//' + host);
   }
-  return fullUrl.replace(/^ws/, 'http');
+  return fullUrl;
 }
 
 exports.requestWS = function(url, callback) {

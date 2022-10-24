@@ -36,8 +36,7 @@ if (process.versions.modules <= 51) {
 fse.removeSync(path.join(WHISTLE_PATH, '.whistle'));
 fse.copySync(path.join(__dirname, 'plugins'), PLUGINS_PATH);
 
-wss.on('connection', function connection(ws) {
-  var req = ws.upgradeReq;
+wss.on('connection', function connection(ws, req) {
   ws.on('message', function(msg) {
     ws.send(JSON.stringify({
       type: 'server',
