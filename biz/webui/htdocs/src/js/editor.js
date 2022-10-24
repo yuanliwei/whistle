@@ -599,7 +599,6 @@ var Editor = React.createClass({
           ref="monaco"
           className="orient-vertical-box w-list-content"
           style={{
-            background:'red',
             minHeight:'300px',
             flexGrow:'1'
           }}></div>
@@ -711,12 +710,12 @@ function setupRulesTheme(monaco){
   }
 
   let allRules = protocols.getAllRules();
-  let regexp = new RegExp(allRules.map(o=>`(${o}{[\\w-_.,]+})`).join('|'));
+  let regexp = new RegExp(allRules.map(o=>`( ${o}({)?[\\w-_.,]+($1)?)`).join('|'));
   setupRulesThemeDisposable = monaco.languages.setMonarchTokensProvider('rules', {
     tokenizer: {
       root: [
         [regexp, 'rule-schema'],
-        [/\w+:\/\/{[\w-_.,]+}/, 'rule-schema-unknown'],
+        [/ \w+:\/\/({)?[\w-_.,]+($1)?/, 'rule-schema-unknown'],
         [/#.*/, 'rule-comment']
       ]
     }
