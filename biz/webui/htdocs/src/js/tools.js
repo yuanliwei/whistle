@@ -109,7 +109,7 @@ var Tools = React.createClass({
                 className={self.getStyle(pluginName)}
                 title={pluginName}
               >
-              {tab.name}
+                {tab.name}
               </button>
             );
           })
@@ -139,7 +139,7 @@ var Tools = React.createClass({
           <Console ref="console" hide={!BTNS[0].active} />
         </LazyInit>
         <LazyInit inited={name === BTNS[1].name}>
-        <ServerLog ref="serverLog" hide={!BTNS[1].active} />
+          <ServerLog ref="serverLog" hide={!BTNS[1].active} />
         </LazyInit>
         <LazyInit inited={name === BTNS[2].name}>
           <ToolBox hide={!BTNS[2].active} />

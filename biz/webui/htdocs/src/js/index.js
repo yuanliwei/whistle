@@ -4206,7 +4206,7 @@ var Index = React.createClass({
               // size='100px'
               color='pink'
               hide={(name == 'rules' || name =='values') ? false : true}
-              >
+            >
               <List
                 ref="rules"
                 disabled={disabledAllRules}

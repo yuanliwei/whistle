@@ -35,10 +35,10 @@ var Properties = React.createClass({
         result.push(
           Array.isArray(value)
             ? value
-                .map(function (val) {
-                  return name + util.toString(val);
-                })
-                .join('\n')
+              .map(function (val) {
+                return name + util.toString(val);
+              })
+              .join('\n')
             : name + util.toString(value)
         );
       });

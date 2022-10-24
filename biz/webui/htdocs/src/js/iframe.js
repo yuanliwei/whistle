@@ -11,9 +11,9 @@ var IFrame = React.createClass({
     $(document).on('mousedown', '.w-iframe-mask', function() {
       $('.w-iframe-mask').hide();
     })
-    .on('mouseenter', '.w-iframe[allow-dragover=1]', function() {
-      $('.w-iframe-mask').hide().parent().removeAttr('allow-dragover');
-    });
+      .on('mouseenter', '.w-iframe[allow-dragover=1]', function() {
+        $('.w-iframe-mask').hide().parent().removeAttr('allow-dragover');
+      });
   },
   render: function() {
     var props = this.props;

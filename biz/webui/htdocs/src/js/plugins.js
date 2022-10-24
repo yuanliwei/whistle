@@ -249,8 +249,8 @@ var Home = React.createClass({
                             ndp
                               ? 'Not allowed disable plugins'
                               : disabled
-                              ? 'Disabled'
-                              : (checked ? 'Disable ' : 'Enable ') + name
+                                ? 'Disabled'
+                                : (checked ? 'Disable ' : 'Enable ') + name
                           }
                           data-name={name}
                           checked={ndp || checked}
@@ -263,7 +263,7 @@ var Home = React.createClass({
                         {util.toLocaleString(new Date(plugin.mtime))}
                       </td>
                       <td className="w-plugins-name" title={plugin.moduleName}>
-                      {plugin.noOpt ? <span>{name}</span> : <a
+                        {plugin.noOpt ? <span>{name}</span> : <a
                           href={url}
                           target="_blank"
                           data-name={name}
@@ -352,15 +352,15 @@ var Home = React.createClass({
                         )}
                         {util.isString(plugin.rulesUrl) ||
                         util.isString(plugin.valuesUrl) ? (
-                          <a
-                            className="w-plugin-btn"
-                            onClick={function () {
-                              self.syncData(plugin);
-                            }}
-                          >
+                            <a
+                              className="w-plugin-btn"
+                              onClick={function () {
+                                self.syncData(plugin);
+                              }}
+                            >
                             Sync
-                          </a>
-                        ) : undefined}
+                            </a>
+                          ) : undefined}
                       </td>
                       <td className="w-plugins-desc" title={plugin.description}>
                         {plugin.description}

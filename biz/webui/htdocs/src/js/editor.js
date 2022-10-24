@@ -594,15 +594,15 @@ var Editor = React.createClass({
             // flexGrow:'1'
           }}
           className="orient-vertical-box w-list-content"
-          ></div>
-          <div 
-            ref="monaco"
-            className="orient-vertical-box w-list-content"
-            style={{
-              background:'red',
-              minHeight:'300px',
-              flexGrow:'1'
-            }}></div>
+        ></div>
+        <div 
+          ref="monaco"
+          className="orient-vertical-box w-list-content"
+          style={{
+            background:'red',
+            minHeight:'300px',
+            flexGrow:'1'
+          }}></div>
       </div>
     );
   }
@@ -715,9 +715,9 @@ function setupRulesTheme(monaco){
   setupRulesThemeDisposable = monaco.languages.setMonarchTokensProvider('rules', {
     tokenizer: {
       root: [
-            [regexp, 'rule-schema'],
-            [/\w+:\/\/{[\w-_.,]+}/, 'rule-schema-unknown'],
-            [/#.*/, 'rule-comment']
+        [regexp, 'rule-schema'],
+        [/\w+:\/\/{[\w-_.,]+}/, 'rule-schema-unknown'],
+        [/#.*/, 'rule-comment']
       ]
     }
   });
@@ -743,9 +743,9 @@ function setupRulesTheme(monaco){
     base: 'vs',
     inherit: true,
     rules: [
-            { token: 'rule-schema', foreground: '#229922', fontStyle: 'bold' },
-            { token: 'rule-schema-unknown', foreground: '#af2018', fontStyle: 'italic strikethrough' },
-            { token: 'rule-comment', foreground: '#999999' }
+      { token: 'rule-schema', foreground: '#229922', fontStyle: 'bold' },
+      { token: 'rule-schema-unknown', foreground: '#af2018', fontStyle: 'italic strikethrough' },
+      { token: 'rule-comment', foreground: '#999999' }
     ],
     colors: {
       'editor.foreground': '#333333'

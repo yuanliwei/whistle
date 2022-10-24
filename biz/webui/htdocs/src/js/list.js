@@ -488,11 +488,11 @@ var List = React.createClass({
             message.success('Good JSON Object.');
           } catch (e) {
             message.error(
-                'Warning: the value of ' +
+              'Warning: the value of ' +
                   item.name +
                   ' can`t be parsed into json. ' +
                   e.message
-              );
+            );
           }
         } else {
           message.error('Bad JSON Object.');
@@ -504,10 +504,10 @@ var List = React.createClass({
       break;
     case 'Help':
       window.open(
-          'https://avwo.github.io/whistle/webui/' +
+        'https://avwo.github.io/whistle/webui/' +
             (self.props.name || 'values') +
             '.html'
-        );
+      );
       break;
     case 'Plugins':
       var modal = self.props.modal;

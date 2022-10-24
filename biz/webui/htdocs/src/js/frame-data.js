@@ -94,8 +94,8 @@ var FrameClient = React.createClass({
             len >= 1024
               ? len + '(' + Number(len / 1024).toFixed(2) + 'k)'
               : len >= 0
-              ? len
-              : ''
+                ? len
+                : ''
         };
       } else {
         overview = {

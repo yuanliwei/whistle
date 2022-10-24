@@ -222,9 +222,9 @@ var Overview = React.createClass({
               time = getTime(modal.request);
               var protocol = modal.protocol;
               if (
-                  typeof protocol === 'string' &&
+                typeof protocol === 'string' &&
                   protocol.indexOf('>') !== -1
-                ) {
+              ) {
                 var diffTime = modal.httpsTime - modal.dnsTime;
                 if (diffTime > 0) {
                   time +=

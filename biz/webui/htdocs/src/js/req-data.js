@@ -909,8 +909,8 @@ var ReqData = React.createClass({
       switch (menu.name) {
       case 'URL':
         menu.copyText = util.getUrl(
-            (item && item.url.replace(/[?#].*$/, '')) || treeUrl
-          );
+          (item && item.url.replace(/[?#].*$/, '')) || treeUrl
+        );
         menu.disabled = isTreeNode;
         break;
       case 'Host':

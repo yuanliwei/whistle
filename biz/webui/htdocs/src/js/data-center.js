@@ -182,12 +182,12 @@ function getFilterText() {
     ? {
       disabledFilterText: settings.disabledFilterText,
       filterText: util
-          .toString(settings.filterText)
-          .substring(0, MAX_INCLUDE_LEN),
+        .toString(settings.filterText)
+        .substring(0, MAX_INCLUDE_LEN),
       disabledExcludeText: settings.disabledExcludeText,
       excludeText: util
-          .toString(settings.excludeText)
-          .substring(0, MAX_EXCLUDE_LEN)
+        .toString(settings.excludeText)
+        .substring(0, MAX_EXCLUDE_LEN)
     }
     : {
       filterText: '',
@@ -323,18 +323,18 @@ function checkFilter(item, list) {
       break;
     case 'headers':
       if (
-          checkFilterField(util.objectToString(item.req.headers), filter, true)
-        ) {
+        checkFilterField(util.objectToString(item.req.headers), filter, true)
+      ) {
         return true;
       }
       break;
     case 'host':
       if (
-          checkFilterField(
-            item.isHttps ? item.url : util.getHost(item.url),
-            filter
-          )
-        ) {
+        checkFilterField(
+          item.isHttps ? item.url : util.getHost(item.url),
+          filter
+        )
+      ) {
         return true;
       }
       break;
@@ -345,8 +345,8 @@ function checkFilter(item, list) {
       break;
     default:
       if (
-          checkFilterField((item.isHttps ? 'tunnel://' : '') + item.url, filter)
-        ) {
+        checkFilterField((item.isHttps ? 'tunnel://' : '') + item.url, filter)
+      ) {
         return true;
       }
     }

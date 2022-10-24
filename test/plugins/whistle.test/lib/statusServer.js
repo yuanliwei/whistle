@@ -9,6 +9,7 @@ module.exports = function(server, options) {
     req.on('error', next);
     res.on('error', next);
     req.setEncoding('utf8');
+    /* eslint-disable-next-line no-unused-vars */
     var body = '';
     req.on('data', function(data) {
       body += data;

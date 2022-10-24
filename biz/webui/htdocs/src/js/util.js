@@ -1359,10 +1359,10 @@ exports.getJson = function (data, isReq, decode) {
         json: body,
         isJSONText: isJSONText,
         str: (window._$hasBigNumberJson ? json2 : JSON).stringify(
-            body,
-            null,
-            '    '
-          )
+          body,
+          null,
+          '    '
+        )
       }
       : '';
   }
@@ -1492,12 +1492,12 @@ exports.encodeNonLatin1Char = function (str) {
 function formatSemer(ver) {
   return ver
     ? ver
-        .split('.')
-        .map(function (v) {
-          v = parseInt(v, 10) || 0;
-          return v > 9 ? v : '0' + v;
-        })
-        .join('.')
+      .split('.')
+      .map(function (v) {
+        v = parseInt(v, 10) || 0;
+        return v > 9 ? v : '0' + v;
+      })
+      .join('.')
     : '';
 }
 

@@ -150,38 +150,38 @@ function checkItem(item, opts) {
     var reqBody = util.getBody(item.req, true);
     var resBody = util.getBody(item.res);
     return setNot(
-        !checkKeywork(reqBody, opts) && !checkKeywork(resBody, opts),
-        opts.not
-      );
+      !checkKeywork(reqBody, opts) && !checkKeywork(resBody, opts),
+      opts.not
+    );
   case 'headers':
   case 'h':
     return setNot(
-        !inObject(item.req.headers, opts) && !inObject(item.res.headers, opts),
-        opts.not
-      );
+      !inObject(item.req.headers, opts) && !inObject(item.res.headers, opts),
+      opts.not
+    );
   case 'type':
   case 't':
     var type = item.res.headers;
     type = type && type['content-type'];
     return setNot(
-        !(typeof type == 'string' && checkKeywork(type, opts)),
-        opts.not
-      );
+      !(typeof type == 'string' && checkKeywork(type, opts)),
+      opts.not
+    );
   case 'ip':
   case 'i':
     return setNot(
-        !checkKeywork(item.req.ip, opts) && !checkKeywork(item.res.ip, opts),
-        opts.not
-      );
+      !checkKeywork(item.req.ip, opts) && !checkKeywork(item.res.ip, opts),
+      opts.not
+    );
   case 'status':
   case 's':
   case 'result':
   case 'r':
     var status = item.res.statusCode;
     return setNot(
-        !checkKeywork(status == null ? '-' : String(status), opts),
-        opts.not
-      );
+      !checkKeywork(status == null ? '-' : String(status), opts),
+      opts.not
+    );
   case 'method':
   case 'm':
     return setNot(!checkKeywork(item.req.method, opts), opts.not);

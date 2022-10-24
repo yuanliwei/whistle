@@ -277,7 +277,7 @@ var ReqData = React.createClass({
             hide={name != tabs[1].name}
           />
         ) : null}
-         {state.initedTimeline ? (
+        {state.initedTimeline ? (
           <Timeline data={data} modal={modal} hide={name != tabs[2].name} />
         ) : null}
         {state.initedComposer ? (
