@@ -710,12 +710,12 @@ function setupRulesTheme(monaco){
   }
 
   let allRules = protocols.getAllRules();
-  let regexp = new RegExp(allRules.map(o=>`( ${o}({)?[\\w-_.,]+($1)?)`).join('|'));
+  let regexp = new RegExp(allRules.map(o=>`((?: )${o}{?[\\w-_.,]+}?)`).join('|'));
   setupRulesThemeDisposable = monaco.languages.setMonarchTokensProvider('rules', {
     tokenizer: {
       root: [
         [regexp, 'rule-schema'],
-        [/ \w+:\/\/({)?[\w-_.,]+($1)?/, 'rule-schema-unknown'],
+        [/\w+:\/\/({)?[\w-_.,]+($1)?/, 'rule-schema-unknown'],
         [/#.*/, 'rule-comment']
       ]
     }

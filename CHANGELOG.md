@@ -1,3 +1,18 @@
+# v2.9.35
+1. feat: Netwok 的 table 表头支持通过右键调整列宽度
+2. feat: Network / Settings 自定义列支持设置关联的 `Data Key`，可以在界面获取抓包数据，无需配置 `style`
+		> 可以通过 Network 抓包列表右键菜单 / Open / Source 获取想要的 `Data Key`
+3. fix: 复制 curl 命令是请求内容换行符处理有误的问题
+
+# v2.9.34
+1. fix: `Network / Tools / Console` 的 Filter 问题，及 Console 采用浏览器的时间
+2. refactor: 远程 rulesValue 加载异常记录日志
+2. feat: 支持通过 `delete://urlParams.xxx` 删除名称为 `xxx` 的请求参数
+3. feat: 支持通过 `delete://reqCookie.xxx` 删除名称为 `xxx` 的请求 cookie
+4. feat: 支持通过 `delete://resCookie.xxx` 删除名称为 `xxx` 的响应 cookie
+5. feat: 支持通过 `delete://cookie.xxx` 删除名称为 `xxx` 的请求及响应 cookie
+   > 上述删除 cookie 操作只会上述请求或响应阶段的 cookie，不会影响已存在浏览器的 cookie
+
 # v2.9.33
 1. fix: 路径有特殊字符的域名通配规则可能导致启动失败
 
