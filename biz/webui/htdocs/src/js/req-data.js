@@ -19,6 +19,7 @@ var storage = require('./storage');
 var TREE_ROW_HEIGHT = 24;
 var ROW_STYLE = { outline: 'none' };
 var columnState = {};
+var columnKeys = {};
 var CMD_RE = /^:dump\s+(\d{1,15})\s*$/;
 var NOT_BOLD_RULES = {
   plugin: 1,
@@ -51,6 +52,7 @@ var contextMenuList = [
     name: 'Copy',
     shiftToEdit: true,
     list: [
+      { name: 'Cell Text' },
       { name: 'Host' },
       { name: 'Path' },
       { name: 'URL' },
@@ -58,8 +60,6 @@ var contextMenuList = [
       { name: 'As CURL' },
       { name: 'Client IP' },
       { name: 'Server IP' },
-      { name: 'Req Headers' },
-      { name: 'Res Headers' },
       { name: 'Cookie' }
     ]
   },
@@ -217,7 +217,7 @@ function getStatusClass(data) {
   }
 
   var statusCode = data.res && data.res.statusCode;
-  if (data.reqError || data.resError) {
+  if (data.reqError || data.resError || (data.customData && data.customData.error)) {
     type += ' danger w-error-status';
   } else if (statusCode == 403) {
     type += ' w-forbidden';
@@ -320,14 +320,12 @@ var Row = React.createClass({
                   item.custom2 = util.getValue(item, key2);
                 }
               }
-              var className = col.className;
-              var value =
-                name === 'hostIp' ? util.getServerIp(item) : item[name];
+              var value = util.getCellValue(item, col);
               var colStyle = getColStyle(col, style);
               return (
                 <td
                   key={name}
-                  className={className}
+                  className={col.className}
                   style={colStyle}
                   title={col.showTitle ? value : undefined}
                 >
@@ -885,12 +883,15 @@ var ReqData = React.createClass({
     this.refs.headContextMenu.show(data);
   },
   onContextMenu: function (e) {
-    var el = $(e.target).closest('.w-req-data-item');
+    var target = $(e.target);
+    var nodeName =  target.prop('nodeName');
+    var el = target.closest('.w-req-data-item');
     var dataId = el.attr('data-id');
     var treeId = el.attr('data-tree');
     var modal = this.props.modal;
     var item = modal.getItem(dataId);
     var disabled = !item;
+    var cellText = item && (nodeName === 'TD' || nodeName === 'TH') && (target.text() || '').trim();
     var treeNodeData = modal.isTreeView && modal.getTreeNode(treeId);
     this.treeTarget = null;
     e.preventDefault();
@@ -922,6 +923,10 @@ var ReqData = React.createClass({
     contextMenuList[1].list.forEach(function (menu) {
       menu.disabled = disabled;
       switch (menu.name) {
+      case 'Cell Text':
+        menu.copyText = cellText;
+        menu.disabled = disabled || !cellText;
+        break;
       case 'URL':
         menu.copyText = util.getUrl(
           (item && item.url.replace(/[?#].*$/, '')) || treeUrl
@@ -952,18 +957,6 @@ var ReqData = React.createClass({
         var serverIp = item && util.getServerIp(item);
         menu.disabled = !serverIp;
         menu.copyText = serverIp;
-        break;
-      case 'Req Headers':
-        menu.copyText =
-            item &&
-            util.objectToString(item.req.rawHeaders || item.req.headers);
-        menu.disabled = !menu.copyText;
-        break;
-      case 'Res Headers':
-        menu.copyText =
-            item &&
-            util.objectToString(item.res.rawHeaders || item.res.headers);
-        menu.disabled = !menu.copyText;
         break;
       case 'Cookie':
         var cookie = item && item.req.headers.cookie;
@@ -1112,8 +1105,10 @@ var ReqData = React.createClass({
     var order;
     if (name == 'order') {
       columnState = {};
+      columnKeys = {};
     } else {
       order = columnState[name];
+      columnKeys[name] = target.getAttribute('data-key');
       if (order == 'desc') {
         columnState[name] = 'asc';
       } else if (order == 'asc') {
@@ -1128,7 +1123,8 @@ var ReqData = React.createClass({
       if ((order = columnState[name])) {
         sortColumns.push({
           name: name,
-          order: order
+          order: order,
+          key: columnKeys[name]
         });
       }
     });
@@ -1174,6 +1170,7 @@ var ReqData = React.createClass({
         data-name={name}
         draggable={true}
         key={name}
+        data-key={col.key}
         className={col.className}
         style={style}
       >
