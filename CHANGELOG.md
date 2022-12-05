@@ -1,3 +1,34 @@
+# v2.9.38
+1. refactor: `req.passThrough(handleReq?, handleRes?)` 提供更多功能
+	``` js
+	req.passThrough(function(rawBuffer, next, ctx) {
+		ctx.getText((err, text) => {
+			console.log(err, text);
+		}, encoding?); // 自动 unzip 并转成字符串，字符编码 encoding 可选
+		ctx.getJson((err, text) => {
+			console.log(err, text);
+			next({
+				body: rawBuffer,
+				rules: '* file://(abc)'
+			});
+		}, encoding?); // 自动 unzip 并转成json
+	}, function(rawBuffer, next, ctx) {
+		ctx.getText((err, text) => {
+			console.log(err, text);
+		}, encoding?); // 自动 unzip 并转成字符串，字符编码 encoding 可选
+		ctx.getJson((err, text) => {
+			console.log(err, text);
+			next({
+				body: rawBuffer,
+				rules: '* file://(abc)'
+			});
+		}, encoding?); // 自动 unzip 并转成json
+	});
+	```
+
+# v2.9.37
+1. fix: `resCookies://` 设置失败问题
+
 # v2.9.36
 1. feat: 支持通过插件的配置 `whistleConfig.networkColumn: { title: 'xxx', key: 'xxx', width: 90 }` 扩展 Network 表格的列
 2. feat: 支持通过插件的配置 `whistleConfig.webWorker: path` 自定义脚本在界面中执行，可以结合自定义列的功能实现查看接口返回错误码（后续补例子）
