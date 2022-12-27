@@ -29,6 +29,7 @@ var ContextMenu = require('./context-menu');
 var CertsInfoDialog = require('./certs-info-dialog');
 var SyncDialog = require('./sync-dialog');
 var AccountDialog = require('./account-dialog');
+var JSONDialog = require('./json-dialog');
 var win = require('./win');
 var Divider = require('./divider');
 var {load} = require('./components/editor/MonacoLoader.js');
@@ -742,6 +743,9 @@ var Index = React.createClass({
     events.on('enableRecord', function () {
       self.enableRecord();
     });
+    events.on('showJsonViewDialog', function(_, data) {
+      self.refs.jsonDialog.show(data);
+    });
     events.on('rulesChanged', function () {
       self.rulesChanged = true;
       self.showReloadRules();
@@ -1297,13 +1301,22 @@ var Index = React.createClass({
       self._uploadValues(form, true);
     });
     var timeout;
+    var hidden = document.hidden;
+    var isAtBottom; // 记录 visibilitychange 之前的状态
     $(document).on('visibilitychange', function () {
       clearTimeout(timeout);
-      if (document.hidden) {
+      var isNetwork = self.state.name === 'network';
+      if (document.hidden || !isNetwork) {
+        if (isNetwork && hidden !== document.hidden) {
+          hidden = true;
+          isAtBottom = self.scrollerAtBottom && self.scrollerAtBottom();
+        }
         return;
       }
+      hidden = false;
       timeout = setTimeout(function () {
-        var atBottom = self.scrollerAtBottom && self.scrollerAtBottom();
+        var atBottom = isAtBottom || self.scrollerAtBottom && self.scrollerAtBottom();
+        isAtBottom = false;
         self.setState({}, function () {
           atBottom && self.autoRefresh();
         });
@@ -1397,6 +1410,13 @@ var Index = React.createClass({
         });
       }
     } catch (e) {}
+  },
+  shouldComponentUpdate: function (_, nextSate) {
+    var name = this.state.name;
+    if (name === 'network' && nextSate.name !== name) {
+      this._isAtBottom = this.scrollerAtBottom && this.scrollerAtBottom();
+    }
+    return true;
   },
   importAnySessions: function (data) {
     if (data) {
@@ -1635,18 +1655,23 @@ var Index = React.createClass({
     }
   },
   showNetwork: function (e) {
-    if (this.state.name == 'network') {
-      e && !this.state.showLeftMenu && this.showNetworkOptions();
+    var self = this;
+    if (self.state.name == 'network') {
+      e && !self.state.showLeftMenu && self.showNetworkOptions();
       return;
     }
-    this.setMenuOptionsState();
-    this.setState(
+    self.setMenuOptionsState();
+    self.setState(
       {
         hasNetwork: true,
         name: 'network'
       },
       function () {
-        this.startLoadData();
+        self.startLoadData();
+        if (self._isAtBottom) {
+          self._isAtBottom = false;
+          self.autoRefresh && self.autoRefresh();
+        }
       }
     );
     util.changePageName('network');
@@ -4856,6 +4881,7 @@ var Index = React.createClass({
           />
         </form>
         <SyncDialog ref="syncDialog" />
+        <JSONDialog ref="jsonDialog" />
       </div>
     );
   }
