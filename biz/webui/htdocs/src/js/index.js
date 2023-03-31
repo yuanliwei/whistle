@@ -398,6 +398,7 @@ var Index = React.createClass({
     var rulesModal = new ListModal(rulesList, rulesData);
     var valuesModal = new ListModal(valuesList, valuesData);
     var networkModal = dataCenter.networkModal;
+    dataCenter.setValuesModal(valuesModal);
     dataCenter.rulesModal = rulesModal;
     state.rulesTheme = rulesTheme;
     state.valuesTheme = valuesTheme;
@@ -793,6 +794,21 @@ var Index = React.createClass({
       } catch (e) {}
     });
 
+    events.on('addNewRulesFile', function(_, data) {
+      var filename = data.filename;
+      var item = self.state.rules.add(filename, data.data);
+      self.setRulesActive(filename);
+      self.setState({ activeRules: item });
+      self.triggerRulesChange('create');
+    });
+    events.on('addNewValuesFile', function(_, data) {
+      var filename = data.filename;
+      var item = self.state.values.add(filename, data.data);
+      self.setValuesActive(filename);
+      self.setState({ activeValues: item });
+      self.triggerValuesChange('create');
+    });
+
     events.on('recoverRules', function (_, data) {
       var modal = self.state.rules;
       var filename = data.filename;
@@ -1112,6 +1128,7 @@ var Index = React.createClass({
         state.disabledAllRules !== data.disabledAllRules ||
         state.allowMultipleChoice !== data.allowMultipleChoice ||
         state.disabledAllPlugins !== data.disabledAllPlugins ||
+        state.backRulesFirst !== data.backRulesFirst ||
         state.multiEnv != server.multiEnv ||
         state.ndp != server.ndp ||
         state.ndr != server.ndr ||
@@ -1122,6 +1139,7 @@ var Index = React.createClass({
         state.enableHttp2 = data.enableHttp2;
         state.disabledAllRules = data.disabledAllRules;
         state.allowMultipleChoice = data.allowMultipleChoice;
+        state.backRulesFirst = data.backRulesFirst;
         state.disabledAllPlugins = data.disabledAllPlugins;
         state.multiEnv = server.multiEnv;
         state.ndp = server.ndp;
@@ -2756,9 +2774,6 @@ var Index = React.createClass({
   composer: function () {
     events.trigger('composer');
   },
-  // showFiles: function () {
-  //   this.refs.filesDialog.show(this.files);
-  // },
   clear: function () {
     var modal = this.state.network;
     this.setState({
@@ -2766,78 +2781,66 @@ var Index = React.createClass({
       showRemoveOptions: false
     });
   },
-  removeRules: function (item) {
+  removeRulesBatch: function(list) {
     var self = this;
+    dataCenter.rules.remove({ list: list }, function (data, xhr) {
+      if (data && data.ec === 0) {
+        var nextItem;
+        var modal = self.state.rules;
+        list.forEach(function(name) {
+          var item = modal.data[name] || '';
+          if (item.active) {
+            nextItem = modal.getSibling(name);
+            nextItem && self.setRulesActive(nextItem.name);
+          }
+          modal.remove(name);
+        });
+        nextItem && events.trigger('expandRulesGroup', nextItem.name);
+        self.setState(nextItem ? { activeRules: nextItem } : {});
+        self.triggerRulesChange('remove');
+        events.trigger('focusRulesList');
+      } else {
+        util.showSystemError(xhr);
+      }
+    });
+    this.refs.deleteRulesDialog.hide();
+  },
+  removeValuesBatch: function(list) {
+    var self = this;
+    dataCenter.values.remove({ list: list }, function (data, xhr) {
+      if (data && data.ec === 0) {
+        var nextItem;
+        var modal = self.state.values;
+        list.forEach(function(name) {
+          var item = modal.data[name] || '';
+          if (item.active) {
+            nextItem = modal.getSibling(name);
+            nextItem && self.setValuesActive(nextItem.name);
+          }
+          modal.remove(name);
+        });
+        nextItem && events.trigger('expandValuesGroup', nextItem.name);
+        self.setState(nextItem ? { activeValues: nextItem } : {});
+        self.triggerValuesChange('remove');
+        events.trigger('focusValuesList');
+      } else {
+        util.showSystemError(xhr);
+      }
+    });
+    this.refs.deleteValuesDialog.hide();
+  },
+  removeRules: function (item) {
     var modal = this.state.rules;
     var activeItem = item || modal.getActive();
     if (activeItem && !activeItem.isDefault) {
-      var name = activeItem.name;
-      win.confirm('Are you sure to delete ' + (util.isGroup(name) ? 'group ' : '') + '\'' + name + '\'.', function (sure) {
-        if (!sure) {
-          return;
-        }
-        var wholeGroup = sure === 2;
-        dataCenter.rules.remove({ name: name, wholeGroup: wholeGroup ? 1 : undefined }, function (data, xhr) {
-          if (data && data.ec === 0) {
-            var nextItem;
-            if (wholeGroup) {
-              nextItem = modal.removeGroup(name);
-            } else {
-              nextItem = item && !item.active ? null : modal.getSibling(name);
-              modal.remove(name);
-            }
-            if (nextItem) {
-              self.setRulesActive(nextItem.name);
-              events.trigger('expandRulesGroup', nextItem.name);
-            }
-            self.setState(
-              item
-                ? {}
-                : {
-                  activeRules: nextItem
-                }
-            );
-            self.triggerRulesChange('remove');
-            events.trigger('focusRulesList');
-          } else {
-            util.showSystemError(xhr);
-          }
-        });
-      }, util.isGroup(name));
+      this.refs.deleteRulesDialog.show(activeItem.name);
     }
   },
   removeValues: function (item) {
-    var self = this;
     var modal = this.state.values;
     var activeItem = item || modal.getActive();
     if (activeItem && !activeItem.isDefault) {
-      var name = activeItem.name;
-      win.confirm('Are you sure to delete ' + (util.isGroup(name) ? 'group ' : '') + '\'' + name + '\'.', function (sure) {
-        if (!sure) {
-          return;
-        }
-        var wholeGroup = sure === 2;
-        dataCenter.values.remove({ name: name, wholeGroup: wholeGroup ? 1 : undefined }, function (data, xhr) {
-          if (data && data.ec === 0) {
-            var nextItem;
-            if (wholeGroup) {
-              nextItem = modal.removeGroup(name);
-            } else {
-              nextItem = item && !item.active ? null : modal.getSibling(name);
-              modal.remove(name);
-            }
-            if (nextItem) {
-              self.setValuesActive(nextItem.name);
-              events.trigger('expandValuesGroup', nextItem.name);
-            }
-            self.setState(item ? {} : { activeValues: nextItem });
-            self.triggerValuesChange('remove');
-            events.trigger('focusValuesList');
-          } else {
-            util.showSystemError(xhr);
-          }
-        });
-      }, util.isGroup(name));
+      this.refs.deleteValuesDialog.show(activeItem.name);
     }
   },
   setRulesActive: function (name, modal) {
@@ -3123,6 +3126,7 @@ var Index = React.createClass({
           self.setState({
             backRulesFirst: checked
           });
+          dataCenter.backRulesFirst = checked;
         } else {
           util.showSystemError(xhr);
         }
@@ -3488,18 +3492,15 @@ var Index = React.createClass({
   },
   getTabName: function () {
     var state = this.state;
-    var networkMode = state.networkMode;
     var rulesMode = state.rulesMode;
-    var rulesOnlyMode = state.rulesOnlyMode;
     var pluginsMode = state.pluginsMode;
     var name = state.name;
-    if (networkMode) {
+    if (state.networkMode) {
       name = 'network';
-    } else if (rulesOnlyMode) {
+    } else if (state.rulesOnlyMode) {
       name = name === 'values' ? 'values' : 'rules';
     } else if (rulesMode && pluginsMode) {
       name = 'plugins';
-      networkMode = true;
     } else if (rulesMode) {
       name = name === 'network' ? 'rules' : name;
     } else if (pluginsMode) {
@@ -3635,6 +3636,8 @@ var Index = React.createClass({
       caUrl += '?type=' + caType;
       caShortUrl += caType;
     }
+
+    dataCenter.hideMockMenu = pluginsMode || networkMode;
 
     return (
       <div
@@ -4818,7 +4821,21 @@ var Index = React.createClass({
             </button>
           </div>
         </Dialog>
-        {/* <FilesDialog ref="filesDialog" /> */}
+        <ListDialog
+          ref="deleteRulesDialog"
+          tips="Are you sure to delete all follow rules or group？"
+          onConfirm={this.removeRulesBatch}
+          name="rules"
+          isRules="1"
+          list={state.rules.list}
+        />
+        <ListDialog
+          ref="deleteValuesDialog"
+          tips="Are you sure to delete all follow values or group？"
+          onConfirm={this.removeValuesBatch}
+          name="values"
+          list={state.values.list}
+        />
         <ListDialog
           ref="selectRulesDialog"
           name="rules"
