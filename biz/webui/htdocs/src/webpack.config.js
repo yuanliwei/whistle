@@ -30,7 +30,12 @@ module.exports = {
       },
       {
         test: /\.(png|woff|woff2|eot|ttf|svg)$/,
-        use: 'url-loader?limit=1000000'
+        type: 'asset',
+        parser: {
+          dataUrlCondition: {
+            maxSize: 1000000
+          }
+        }
       },
       {
         test: /\.md$/,

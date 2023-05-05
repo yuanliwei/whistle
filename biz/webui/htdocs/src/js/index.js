@@ -272,7 +272,8 @@ function getValue(url) {
 
 var Index = React.createClass({
   getInitialState: function () {
-    var modal = this.props.modal;
+    var self = this;
+    var modal = self.props.modal;
     var rules = modal.rules;
     var values = modal.values;
     var server = modal.server;
@@ -297,8 +298,7 @@ var Index = React.createClass({
       ndp: server.ndp,
       drb: server.drb,
       drm: server.drm,
-      version: modal.version,
-      accountUrl: server.account && server.account.url
+      version: modal.version
     };
     if (hideLeftMenu !== false) {
       hideLeftMenu = hideLeftMenu || server.hideLeftMenu;
@@ -400,6 +400,22 @@ var Index = React.createClass({
     var networkModal = dataCenter.networkModal;
     dataCenter.setValuesModal(valuesModal);
     dataCenter.rulesModal = rulesModal;
+    dataCenter.exportSessions = function(sessions, opts, name) {
+      var type;
+      if (typeof opts === 'string') {
+        type = opts;
+      } else if (opts) {
+        type = opts.type;
+        name = opts.name || name;
+      }
+      if (type === 'saz' || type === 'fiddler') {
+        type = 'Fiddler';
+      }
+      if (typeof name !== 'string') {
+        name = '';
+      }
+      self.exportSessions(type, name, sessions);
+    };
     state.rulesTheme = rulesTheme;
     state.valuesTheme = valuesTheme;
     state.rulesFontSize = rulesFontSize;
@@ -418,19 +434,19 @@ var Index = React.createClass({
     state.rules = rulesModal;
     state.network = networkModal;
     state.rulesOptions = rulesOptions;
-    state.pluginsOptions = this.createPluginsOptions(modal.plugins);
+    state.pluginsOptions = self.createPluginsOptions(modal.plugins);
     dataCenter.valuesModal = state.values = valuesModal;
     state.valuesOptions = valuesOptions;
-    dataCenter.syncData = this.syncData;
-    dataCenter.syncRules = this.syncRules;
-    dataCenter.syncValues = this.syncValues;
+    dataCenter.syncData = self.syncData;
+    dataCenter.syncRules = self.syncRules;
+    dataCenter.syncValues = self.syncValues;
 
-    this.initPluginTabs(state, modal.plugins);
+    self.initPluginTabs(state, modal.plugins);
     if (rulesModal.exists(dataCenter.activeRulesName)) {
-      this.setRulesActive(dataCenter.activeRulesName, rulesModal);
+      self.setRulesActive(dataCenter.activeRulesName, rulesModal);
     }
     if (valuesModal.exists(dataCenter.activeValuesName)) {
-      this.setValuesActive(dataCenter.activeValuesName, valuesModal);
+      self.setValuesActive(dataCenter.activeValuesName, valuesModal);
     }
 
     state.networkOptions = [
@@ -514,11 +530,10 @@ var Index = React.createClass({
     if (showTreeView || showTreeView === false) {
       networkModal.setTreeView(showTreeView, true);
     }
-    var self = this;
     events.on('importSessionsFromUrl', function (_, url) {
       self.importSessionsFromUrl(url);
     });
-    return this.updateMenuView(state);
+    return self.updateMenuView(state);
   },
   initPluginTabs: function(state, plugins) {
     plugins = plugins || {};
@@ -792,6 +807,17 @@ var Index = React.createClass({
         };
         self.refs.editorWin.show('editor.html');
       } catch (e) {}
+    });
+
+    var updateTimer;
+    events.on('updateUIThrottle', function() {
+      if (updateTimer) {
+        return;
+      }
+      updateTimer = setTimeout(function() {
+        updateTimer = null;
+        self.setState({});
+      }, 200);
     });
 
     events.on('addNewRulesFile', function(_, data) {
@@ -1121,7 +1147,6 @@ var Index = React.createClass({
     dataCenter.on('settings', function (data) {
       var state = self.state;
       var server = data.server;
-      var accountUrl = server.account && server.account.url;
       if (
         state.interceptHttpsConnects !== data.interceptHttpsConnects ||
         state.enableHttp2 !== data.enableHttp2 ||
@@ -1150,12 +1175,8 @@ var Index = React.createClass({
         var list = LEFT_BAR_MENUS;
         list[3].checked = !state.disabledAllRules;
         list[4].checked = !state.disabledAllPlugins;
-        self.setState({ accountUrl: accountUrl });
         self.refs.contextMenu.update();
         return;
-      }
-      if (state.accountUrl !== accountUrl) {
-        self.setState({ accountUrl: accountUrl });
       }
     });
     dataCenter.on('rules', function (data) {
@@ -2314,7 +2335,7 @@ var Index = React.createClass({
     $(ReactDOM.findDOMNode(this.refs.rootCADialog)).modal('show');
   },
   showAccountDialog: function() {
-    this.refs.accountDialog.show(this.state.accountUrl);
+    
   },
   interceptHttpsConnects: function (e) {
     var self = this;
@@ -2873,6 +2894,7 @@ var Index = React.createClass({
       showLeftMenu: showLeftMenu
     });
     storage.set('showLeftMenu', showLeftMenu ? 1 : '');
+    events.trigger('editorResize');
   },
   handleCreate: function () {
     this.state.name == 'rules'
@@ -3230,6 +3252,7 @@ var Index = React.createClass({
         realUrl: entry.whistleRealUrl,
         req: req,
         res: res,
+        customData: entry.whistleCustomData,
         fwdHost: entry.whistleFwdHost,
         sniPlugin: entry.whistleSniPlugin,
         rules: entry.whistleRules || {},
@@ -3293,16 +3316,17 @@ var Index = React.createClass({
     }
     dataCenter.upload.importSessions(data, dataCenter.addNetworkList);
   },
-  exportSessions: function (type, name) {
+  getExportSessions: function() {
     var modal = this.state.network;
     var sessions = this.currentFoucsItem;
     this.currentFoucsItem = null;
-    if (
-      !sessions ||
-      !$(ReactDOM.findDOMNode(this.refs.chooseFileType)).is(':visible')
-    ) {
+    if (!sessions || !$(ReactDOM.findDOMNode(this.refs.chooseFileType)).is(':visible')) {
       sessions = modal.getSelectedList();
     }
+    return sessions;
+  },
+  exportSessions: function (type, name, sessions) {
+    sessions = sessions || this.getExportSessions();
     if (!sessions || !sessions.length) {
       return;
     }
@@ -3611,7 +3635,6 @@ var Index = React.createClass({
     var pendingRules = state.pendingRules;
     var pendingValues = state.pendingValues;
     var accountRules = state.accountRules;
-    var accountUrl = state.accountUrl;
     var mustHideLeftMenu = hideLeftMenu && !state.forceShowLeftMenu;
     var pluginsOnlyMode = pluginsMode && rulesMode;
     var showLeftMenu = (networkMode || state.showLeftMenu) && !pluginsOnlyMode;
@@ -3667,6 +3690,14 @@ var Index = React.createClass({
                 (showLeftMenu ? (mustHideLeftMenu ? 'down' : 'up') : 'left')
               }
             ></span>
+          </a>
+          <a
+            onClick={this.showAccountDialog}
+            className="w-account-menu"
+            draggable="false"
+          >
+            <span className="glyphicon glyphicon-user"></span>
+            Account
           </a>
           <div
             style={{ display: rulesMode ? 'none' : undefined }}
@@ -3925,7 +3956,7 @@ var Index = React.createClass({
             style={{ display: isNetwork || isPlugins ? 'none' : '' }}
             draggable="false"
           >
-            <span className="glyphicon glyphicon-edit"></span>Rename
+            <span className="glyphicon glyphicon-transfer"></span>Rename
           </a>
           <div
             onMouseEnter={this.showAbortOptions}
@@ -3955,7 +3986,7 @@ var Index = React.createClass({
             style={{ display: isNetwork ? '' : 'none' }}
             draggable="false"
           >
-            <span className="glyphicon glyphicon-send"></span>Compose
+            <span className="glyphicon glyphicon-send"></span>Edit
           </a>
           <a
             onClick={this.onClickMenu}
@@ -4016,8 +4047,8 @@ var Index = React.createClass({
                 'glyphicon glyphicon-' +
                 (state.interceptHttpsConnects ? 'ok' : 'lock')
               }
-            ></span>
-            HTTPS
+            />
+            <span className="w-https-name">HTTPS</span>
           </a>
           <div
             onMouseEnter={this.showHelpOptions}
@@ -4044,7 +4075,8 @@ var Index = React.createClass({
               target={state.hasNewVersion ? undefined : '_blank'}
             >
               {state.hasNewVersion ? <i className="w-new-version-icon" /> : null}
-              <span className="glyphicon glyphicon-question-sign"></span>Help
+              <span className="glyphicon glyphicon-question-sign" />
+              <span className="w-help-name">Help</span>
             </a>
             <MenuItem
               ref="helpMenuItem"
@@ -4059,15 +4091,6 @@ var Index = React.createClass({
               className="w-help-menu-item"
             />
           </div>
-          <a
-            onClick={this.showAccountDialog}
-            className="w-account-menu"
-            draggable="false"
-            style={{display: accountUrl ? null : 'none'}}
-          >
-            <span className="glyphicon glyphicon-user"></span>
-            Account
-          </a>
           <Online name={name} />
           <div
             onMouseDown={this.preventBlur}
@@ -4190,6 +4213,14 @@ var Index = React.createClass({
             onMouseEnter={forceShowLeftMenu}
             onMouseLeave={forceHideLeftMenu}
           >
+            <a
+              onClick={this.showAccountDialog}
+              className="w-account-menu"
+              draggable="false"
+            >
+              <span className="glyphicon glyphicon-user"></span>
+              <i className="w-left-menu-name">Account</i>
+            </a>
             <a
               onClick={this.showNetwork}
               className={
@@ -4899,6 +4930,7 @@ var Index = React.createClass({
         </form>
         <SyncDialog ref="syncDialog" />
         <JSONDialog ref="jsonDialog" />
+        <div id="copyTextBtn" style={{display: 'none'}} />
       </div>
     );
   }

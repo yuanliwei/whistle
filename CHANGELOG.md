@@ -1,3 +1,26 @@
+# v2.9.48
+1. feat: 插件扩展的右键菜单和 Tab 添加 `exportSessions(sessions, type, name)` 方法
+2. feat: 插件 server 的 options 添加 `generateSaz(sessions): Buffer` 和 `extract(saz: Buffer, cb(sessions))` 方法
+3. refactor: 兼容 saz 的 comment，需要配合插件使用：https://github.com/whistle-plugins/whistle.comment.git
+4. fix: 修复访问 socks 代理可能出现 pending 的问题
+5. style: 界面优化
+
+# v2.9.47
+1. refactor: 解决安装时依赖包安全警告问题
+2. feat: 支持自定义右键菜单获取树结点下的所有抓包数据
+
+# v2.9.46
+1. feat: 扩展 Tab 支持 `copyText` 方法
+2. feat: `tpl` 协议支持模板字符串语法
+
+# v2.9.45
+1. feat: 插件界面提供 `copyText` 方法
+2. feat: 支持 `lineProps://strictHtml` 和 `lineProsy://safeHtml` 只对当前行的规则生效
+3. style: Mock Dialog 支持直接保存 Value
+
+# v2.9.44
+1. fix: 解决 `qs` 模块不存在问题
+
 # v2.9.43
 1. feat: 允许通过 `enable://capture` 解析 socks 代理的 HTTPS 请求
 2. feat: 支持通过 Network 右键菜单 `Mock` 按钮快速创建规则：http://wproxy.org/whistle/webui/mock.html
