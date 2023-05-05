@@ -70,10 +70,23 @@ ${code.includes('export ') ? '' : 'export default exports'}
  */
 function fileloader(ext) {
   return {
-    name: 'fileloader:'+ext,
+    name: 'fileloader:' + ext,
     async transform(code, id) {
-      if(id.endsWith('.md')){
-        return 'export default '+JSON.stringify(code);
+      if (id.endsWith('.md')) {
+        return 'export default ' + JSON.stringify(code);
+      }
+    }
+  };
+}
+
+/**
+ * @returns {import('vite').PluginOption}
+ */
+function fixedModule() {
+  return {
+    transform(code, id) {
+      if(id.includes('bootstrap_dist_js_bootstrap__js')){
+        return code + '\n exports = {}';
       }
     }
   };
@@ -96,7 +109,15 @@ export default defineConfig({
   },
   plugins: [
     fileloader('.md'),
-    react({}),
+    fixedModule(),
+    react({
+      babel: {
+        presets: [
+          '@babel/preset-env',
+          '@babel/preset-react',
+        ]
+      },
+    }),
     wrapperCJS()
   ]
 });

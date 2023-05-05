@@ -1,8 +1,8 @@
-diff --git a/node_modules/vite/dist/node/chunks/dep-4da11a5e.js b/node_modules/vite/dist/node/chunks/dep-4da11a5e.js
-index 5870ff0..a10608c 100644
---- a/node_modules/vite/dist/node/chunks/dep-4da11a5e.js
-+++ b/node_modules/vite/dist/node/chunks/dep-4da11a5e.js
-@@ -37994,7 +37994,7 @@ function transformCjsImport(importExp, url, rawUrl, importIndex) {
+diff --git a/node_modules/vite/dist/node/chunks/dep-f7d05e3f.js b/node_modules/vite/dist/node/chunks/dep-f7d05e3f.js
+index f96eb3f..ff13fde 100644
+--- a/node_modules/vite/dist/node/chunks/dep-f7d05e3f.js
++++ b/node_modules/vite/dist/node/chunks/dep-f7d05e3f.js
+@@ -40941,7 +40941,7 @@ function transformCjsImport(importExp, url, rawUrl, importIndex, importer, confi
                  lines.push(`const ${localName} = ${cjsModuleName}`);
              }
              else if (importedName === 'default') {

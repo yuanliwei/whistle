@@ -1,0 +1,13 @@
+diff --git a/node_modules/@vitejs/plugin-react/dist/index.mjs b/node_modules/@vitejs/plugin-react/dist/index.mjs
+index 87e8d49..47d1c3f 100644
+--- a/node_modules/@vitejs/plugin-react/dist/index.mjs
++++ b/node_modules/@vitejs/plugin-react/dist/index.mjs
+@@ -133,7 +133,7 @@ function viteReact(opts = {}) {
+         return newBabelOptions;
+       })();
+       const plugins = [...babelOptions.plugins];
+-      const isJSX = filepath.endsWith("x");
++      const isJSX = filepath.endsWith("x") || code.includes('React');
+       const useFastRefresh = !skipFastRefresh && !ssr && (isJSX || (opts.jsxRuntime === "classic" ? code.includes(devRuntime) : importReactRE.test(code)));
+       if (useFastRefresh) {
+         plugins.push([
