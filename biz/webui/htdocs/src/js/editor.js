@@ -133,6 +133,44 @@ var Editor = React.createClass({
     }
     this._editor.setValue(value);
   },
+  setHistory: function(init, history) {
+    var modal = this.props.modal;
+    if (!modal) {
+      return;
+    }
+    var activeItem = modal.getActive();
+    var list = modal.list;
+    var len = list.length;
+    var map = this._editorHistoryMap || {};
+    if (!len) {
+      this._editorHistoryMap = {};
+    } else if (len !== this._listLen) {
+      Object.keys(map).forEach(function(key) {
+        if (list.indexOf(key) === -1) {
+          delete map[key];
+        }
+      });
+    }
+    this._listLen = len;
+    if(!activeItem) {
+      return;
+    }
+    var name = activeItem.name;
+    this._editorHistoryMap = map;
+    if(init) {
+      this._editorCurrentHistoryKey = name;
+    } else {
+      if(this._editorCurrentHistoryKey !== name) {
+        map[this._editorCurrentHistoryKey] = history;
+        this._editorCurrentHistoryKey = name;
+        this._editor.clearHistory();
+        if(map[name]) {
+          this._editor.setHistory(map[name]);
+          delete map[name];
+        }
+      }
+    }
+  },
   getValue: function () {
     return this.editorMonaco ? '' : this.editorMonaco.getValue();
   },
@@ -558,15 +596,18 @@ var Editor = React.createClass({
     self.setMode(mode);
     self._waitingUpdate = false;
     var value = self.props.value;
+    var history = self._editor.getHistory();
     if (init && value && value.length > INIT_LENGTH) {
       var elem = message.info('Loading...');
       self.timer = setTimeout(function () {
         elem.hide();
         self.timer = null;
         self.setValue(self.props.value); // 节流
+        self.setHistory(init, history);
       }, 500);
     } else if (!self.timer) {
       self.setValue(value);
+      self.setHistory(init, history);
     }
     self.setTheme(self.props.theme);
     self.setFontSize(self.props.fontSize);

@@ -30,6 +30,7 @@ var CertsInfoDialog = require('./certs-info-dialog');
 var SyncDialog = require('./sync-dialog');
 var AccountDialog = require('./account-dialog');
 var JSONDialog = require('./json-dialog');
+var Account = require('./account');
 var win = require('./win');
 var Divider = require('./divider');
 var {load} = require('./components/editor/MonacoLoader.js');
@@ -50,6 +51,7 @@ var OPTIONS_WITH_SELECTED = [
   'exportWhistleFile',
   'exportSazFile'
 ];
+var HIDE_STYLE = { display: 'none' };
 var search = window.location.search;
 var hideLeftMenu;
 var showTreeView;
@@ -207,17 +209,20 @@ function getRemoteDataHandler(callback) {
 }
 
 function getPageName(options) {
-  if (options.networkMode) {
-    return 'network';
-  }
-  if (options.rulesMode && options.pluginsMode) {
-    return 'plugins';
-  }
   var hash = location.hash.substring(1);
   if (hash) {
     hash = hash.replace(/[?#].*$/, '');
   } else {
     hash = location.href.replace(/[?#].*$/, '').replace(/.*\//, '');
+  }
+  if (options.showAccount && hash === 'account') {
+    return hash;
+  }
+  if (options.networkMode) {
+    return 'network';
+  }
+  if (options.rulesMode && options.pluginsMode) {
+    return 'plugins';
   }
   if (options.rulesOnlyMode) {
     return hash === 'values' ? 'values' : 'rules';
@@ -313,6 +318,9 @@ var Index = React.createClass({
     } else if (pageName.indexOf('plugins') != -1) {
       state.hasPlugins = true;
       state.name = 'plugins';
+    } else if (state.showAccount && pageName === 'account') {
+      state.hasAccount = true;
+      state.name = 'account';
     } else {
       state.hasNetwork = true;
       state.name = 'network';
@@ -740,6 +748,20 @@ var Index = React.createClass({
     }
     $('.w-reload-data-tips').html(msg).attr('data-name', this.state.name);
   },
+  showTab: function() {
+    var pageName = getPageName(this.state);
+    if (!pageName || pageName.indexOf('rules') != -1) {
+      this.showRules();
+    } else if (pageName.indexOf('values') != -1) {
+      this.showValues();
+    } else if (pageName.indexOf('plugins') != -1) {
+      this.showPlugins();
+    } else if (this.state.showAccount && pageName === 'account') {
+      this.showAccount();
+    } else {
+      this.showNetwork();
+    }
+  },
   componentDidMount: function () {
     var self = this;
     var clipboard = new Clipboard('.w-copy-text');
@@ -775,6 +797,18 @@ var Index = React.createClass({
     events.on('valuesChanged', function () {
       self.valuesChanged = true;
       self.showReloadValues();
+    });
+    events.on('showNetwork', function () {
+      self.showNetwork();
+    });
+    events.on('showRules', function () {
+      self.showRules();
+    });
+    events.on('showValues', function () {
+      self.showValues();
+    });
+    events.on('showPlugins', function () {
+      self.showPlugins();
     });
     events.on('disableAllPlugins', self.disableAllPlugins);
     events.on('disableAllRules', self.disableAllRules);
@@ -978,18 +1012,7 @@ var Index = React.createClass({
       e.preventDefault();
     };
     $(window)
-      .on('hashchange', function () {
-        var pageName = getPageName(self.state);
-        if (!pageName || pageName.indexOf('rules') != -1) {
-          self.showRules();
-        } else if (pageName.indexOf('values') != -1) {
-          self.showValues();
-        } else if (pageName.indexOf('plugins') != -1) {
-          self.showPlugins();
-        } else {
-          self.showNetwork();
-        }
-      })
+      .on('hashchange', self.showTab)
       .on('keyup', function (e) {
         if (e.keyCode == 27) {
           self.setMenuOptionsState();
@@ -1715,6 +1738,21 @@ var Index = React.createClass({
     );
     util.changePageName('network');
   },
+  showAccount: function() {
+    var self = this;
+    if (self.state.name == 'account') {
+      return;
+    }
+    self.setState({
+      name: 'account',
+      hasAccount: true
+    });
+    util.changePageName('account');
+  },
+  signOut: function() {
+    this.state.showAccount = false;
+    this.showTab();
+  },
   handleNetwork: function (item, e) {
     var modal = this.state.network;
     if (item.id == 'removeAll') {
@@ -2333,9 +2371,6 @@ var Index = React.createClass({
   },
   showHttpsSettingsDialog: function () {
     $(ReactDOM.findDOMNode(this.refs.rootCADialog)).modal('show');
-  },
-  showAccountDialog: function() {
-    
   },
   interceptHttpsConnects: function (e) {
     var self = this;
@@ -3156,7 +3191,11 @@ var Index = React.createClass({
     );
   },
   reinstallAllPlugins: function () {
-    events.trigger('updateAllPlugins', 'reinstallAllPlugins');
+    if (dataCenter.enablePluginMgr) {
+      events.trigger('installPlugins');
+    } else {
+      events.trigger('updateAllPlugins', 'reinstallAllPlugins');
+    }
   },
   chooseFileType: function (e) {
     var value = e.target.value;
@@ -3519,6 +3558,9 @@ var Index = React.createClass({
     var rulesMode = state.rulesMode;
     var pluginsMode = state.pluginsMode;
     var name = state.name;
+    if (state.showAccount && name === 'account') {
+      return name;
+    }
     if (state.networkMode) {
       name = 'network';
     } else if (state.rulesOnlyMode) {
@@ -3540,10 +3582,15 @@ var Index = React.createClass({
     var pluginsMode = state.pluginsMode;
     var multiEnv = state.multiEnv;
     var name = this.getTabName();
+    var isAccount = name == 'account';
     var isNetwork = name == 'network';
     var isRules = name == 'rules';
     var isValues = name == 'values';
     var isPlugins = name == 'plugins';
+    var isEditor = isRules || isValues;
+    var editMenuStyle = isEditor ? null : HIDE_STYLE;
+    var importMenuStyle = isPlugins || isAccount ? HIDE_STYLE : null;
+    var accountMenuStyle = isAccount ? null : HIDE_STYLE;
     var disabledEditBtn = true;
     var disabledDeleteBtn = true;
     var rulesTheme = state.rulesTheme || 'cobalt';
@@ -3637,10 +3684,12 @@ var Index = React.createClass({
     var accountRules = state.accountRules;
     var mustHideLeftMenu = hideLeftMenu && !state.forceShowLeftMenu;
     var pluginsOnlyMode = pluginsMode && rulesMode;
-    var showLeftMenu = (networkMode || state.showLeftMenu) && !pluginsOnlyMode;
+    var showAccount = state.showAccount;
+    var showLeftMenu = ((networkMode && !showAccount)  || state.showLeftMenu) && (!pluginsOnlyMode || showAccount);
     var disabledAllPlugins = state.disabledAllPlugins;
     var disabledAllRules = state.disabledAllRules;
     var forceShowLeftMenu, forceHideLeftMenu;
+    var pluginsStyle = rulesOnlyMode || (pluginsOnlyMode && !showAccount) || networkMode ? HIDE_STYLE : null;
     if (showLeftMenu && hideLeftMenu) {
       forceShowLeftMenu = this.forceShowLeftMenu;
       forceHideLeftMenu = this.forceHideLeftMenu;
@@ -3659,13 +3708,17 @@ var Index = React.createClass({
       caUrl += '?type=' + caType;
       caShortUrl += caType;
     }
-
-    dataCenter.hideMockMenu = pluginsMode || networkMode;
+    var hideEditor = pluginsMode || networkMode;
+    var hideEditorStyle = hideEditor ? HIDE_STYLE : null;
+    dataCenter.hideMockMenu = hideEditor;
 
     return (
       <div
         className={
           'main orient-vertical-box' + (showLeftMenu ? ' w-show-left-menu' : '')
+          + (showAccount ? ' w-show-account' : '')
+          + (isEditor && !rulesOnlyMode ? ' w-show-editor' : '') + (isRules ? ' w-show-rules' : '')
+          + (rulesOnlyMode || rulesMode ? ' w-show-rules-mode' : '')
         }
       >
         <div className={'w-menu w-' + name + '-menu-list'}>
@@ -3675,9 +3728,7 @@ var Index = React.createClass({
             className="w-show-left-menu-btn"
             onMouseEnter={forceShowLeftMenu}
             onMouseLeave={forceHideLeftMenu}
-            style={{
-              display: networkMode || pluginsOnlyMode ? 'none' : undefined
-            }}
+            style={!showAccount && (networkMode || pluginsOnlyMode) ? HIDE_STYLE : null}
             title={
               'Dock to ' +
               (showLeftMenu ? 'top' : 'left') +
@@ -3690,14 +3741,6 @@ var Index = React.createClass({
                 (showLeftMenu ? (mustHideLeftMenu ? 'down' : 'up') : 'left')
               }
             ></span>
-          </a>
-          <a
-            onClick={this.showAccountDialog}
-            className="w-account-menu"
-            draggable="false"
-          >
-            <span className="glyphicon glyphicon-user"></span>
-            Account
           </a>
           <div
             style={{ display: rulesMode ? 'none' : undefined }}
@@ -3712,7 +3755,7 @@ var Index = React.createClass({
               onClick={this.showNetwork}
               onDoubleClick={this.toggleTreeView}
               className={
-                'w-network-menu' + (name == 'network' ? ' w-menu-selected' : '')
+                'w-network-menu' + (isNetwork ? ' w-menu-selected' : '')
               }
               title={
                 'Double click to show' +
@@ -3731,7 +3774,7 @@ var Index = React.createClass({
             />
           </div>
           <div
-            style={{ display: pluginsMode ? 'none' : undefined }}
+            style={hideEditorStyle}
             onMouseEnter={this.showRulesOptions}
             onMouseLeave={this.hideRulesOptions}
             className={
@@ -3743,7 +3786,7 @@ var Index = React.createClass({
             <a
               onClick={this.showRules}
               className={
-                'w-rules-menu' + (name == 'rules' ? ' w-menu-selected' : '')
+                'w-rules-menu' + (isRules ? ' w-menu-selected' : '')
               }
               draggable="false"
             >
@@ -3757,7 +3800,7 @@ var Index = React.createClass({
             </a>
             <MenuItem
               ref="rulesMenuItem"
-              name={name == 'rules' ? null : 'Open'}
+              name={isRules ? null : 'Open'}
               options={rulesOptions}
               checkedOptions={uncheckedRules}
               disabled={disabledAllRules}
@@ -3768,7 +3811,7 @@ var Index = React.createClass({
             />
           </div>
           <div
-            style={{ display: pluginsMode ? 'none' : undefined }}
+            style={hideEditorStyle}
             onMouseEnter={this.showValuesOptions}
             onMouseLeave={this.hideValuesOptions}
             className={
@@ -3780,7 +3823,7 @@ var Index = React.createClass({
             <a
               onClick={this.showValues}
               className={
-                'w-values-menu' + (name == 'values' ? ' w-menu-selected' : '')
+                'w-values-menu' + (isValues ? ' w-menu-selected' : '')
               }
               draggable="false"
             >
@@ -3788,7 +3831,7 @@ var Index = React.createClass({
             </a>
             <MenuItem
               ref="valuesMenuItem"
-              name={name == 'values' ? null : 'Open'}
+              name={isValues ? null : 'Open'}
               options={state.valuesOptions}
               className="w-values-menu-item"
               onClick={this.showValues}
@@ -3796,9 +3839,7 @@ var Index = React.createClass({
             />
           </div>
           <div
-            style={{
-              display: rulesOnlyMode || pluginsOnlyMode ? 'none' : undefined
-            }}
+            style={pluginsStyle}
             ref="pluginsMenu"
             onMouseEnter={this.showPluginsOptions}
             onMouseLeave={this.hidePluginsOptions}
@@ -3810,7 +3851,7 @@ var Index = React.createClass({
             <a
               onClick={this.showPlugins}
               className={
-                'w-plugins-menu' + (name == 'plugins' ? ' w-menu-selected' : '')
+                'w-plugins-menu' + (isPlugins ? ' w-menu-selected' : '')
               }
               draggable="false"
             >
@@ -3824,7 +3865,7 @@ var Index = React.createClass({
             </a>
             <MenuItem
               ref="pluginsMenuItem"
-              name={name == 'plugins' ? null : 'Open'}
+              name={isPlugins ? null : 'Open'}
               options={pluginsOptions}
               checkedOptions={state.disabledPlugins}
               disabled={disabledAllPlugins}
@@ -3834,6 +3875,14 @@ var Index = React.createClass({
               onClickOption={this.showAndActivePlugins}
             />
           </div>
+          <a
+            onClick={this.showAccount}
+            className={'w-account-menu' + (isAccount ? ' w-menu-selected' : '')}
+            draggable="false"
+          >
+            <span className="glyphicon glyphicon-user" />
+            Account
+          </a>
           {!state.ndr && (
             <a
               onClick={this.confirmDisableAllRules}
@@ -3887,7 +3936,7 @@ var Index = React.createClass({
             draggable="false"
           >
             <span className="glyphicon glyphicon-download-alt" />
-            ReinstallAll
+            {dataCenter.enablePluginMgr ? 'Install' : 'ReinstallAll'}
           </a>
           <RecordBtn
             ref="recordBtn"
@@ -3897,7 +3946,7 @@ var Index = React.createClass({
           <a
             onClick={this.importData}
             className="w-import-menu"
-            style={{ display: isPlugins ? 'none' : '' }}
+            style={importMenuStyle}
             draggable="false"
           >
             <span className="glyphicon glyphicon-import"></span>Import
@@ -3905,7 +3954,7 @@ var Index = React.createClass({
           <a
             onClick={this.exportData}
             className="w-export-menu"
-            style={{ display: isPlugins ? 'none' : '' }}
+            style={importMenuStyle}
             draggable="false"
           >
             <span className="glyphicon glyphicon-export"></span>Export
@@ -3936,7 +3985,7 @@ var Index = React.createClass({
           <a
             onClick={this.onClickMenu}
             className="w-save-menu"
-            style={{ display: isNetwork || isPlugins ? 'none' : '' }}
+            style={editMenuStyle}
             draggable="false"
             title="Ctrl[Command] + S"
           >
@@ -3944,7 +3993,7 @@ var Index = React.createClass({
           </a>
           <a
             className="w-create-menu"
-            style={{ display: isNetwork || isPlugins ? 'none' : '' }}
+            style={editMenuStyle}
             draggable="false"
             onClick={this.handleCreate}
           >
@@ -3953,7 +4002,7 @@ var Index = React.createClass({
           <a
             onClick={this.onClickMenu}
             className={'w-edit-menu' + (disabledEditBtn ? ' w-disabled' : '')}
-            style={{ display: isNetwork || isPlugins ? 'none' : '' }}
+            style={editMenuStyle}
             draggable="false"
           >
             <span className="glyphicon glyphicon-transfer"></span>Rename
@@ -3993,10 +4042,18 @@ var Index = React.createClass({
             className={
               'w-delete-menu' + (disabledDeleteBtn ? ' w-disabled' : '')
             }
-            style={{ display: isNetwork || isPlugins ? 'none' : '' }}
+            style={editMenuStyle}
             draggable="false"
           >
             <span className="glyphicon glyphicon-trash"></span>Delete
+          </a>
+          <a
+            onClick={this.addWidget}
+            className="w-add-widget"
+            style={accountMenuStyle}
+            draggable="false"
+          >
+            <span className="glyphicon glyphicon-plus"></span>Widget
           </a>
           <FilterBtn
             onClick={this.showSettings}
@@ -4004,13 +4061,6 @@ var Index = React.createClass({
             isNetwork={isNetwork}
             hide={isPlugins}
           />
-          {/* <a
-            onClick={this.showFiles}
-            className="w-files-menu"
-            draggable="false"
-          >
-            <span className="glyphicon glyphicon-upload"></span>Files
-          </a> */}
           <div
             onMouseEnter={this.showWeinreOptions}
             onMouseLeave={this.hideWeinreOptions}
@@ -4020,12 +4070,21 @@ var Index = React.createClass({
             }
           >
             <a
+              onClick={this.showFiles}
+              className="w-files-menu"
+              style={showAccount ? null : HIDE_STYLE}
+              draggable="false"
+            >
+              <span className="glyphicon glyphicon-file" />Files
+            </a>
+            <a
               onClick={this.showWeinreOptionsQuick}
               onDoubleClick={this.showAnonymousWeinre}
               className="w-weinre-menu"
               draggable="false"
             >
-              <span className="glyphicon glyphicon-console"></span>Weinre
+              <span className="glyphicon glyphicon-console" />
+              <span className="w-weinre-name">Weinre</span>
             </a>
             <MenuItem
               ref="weinreMenuItem"
@@ -4207,24 +4266,14 @@ var Index = React.createClass({
             className={
               'w-left-menu' + (forceShowLeftMenu ? ' w-hover-left-menu' : '')
             }
-            style={{
-              display: networkMode || mustHideLeftMenu ? 'none' : undefined
-            }}
+            style={(!showAccount && networkMode) || mustHideLeftMenu ? HIDE_STYLE : null}
             onMouseEnter={forceShowLeftMenu}
             onMouseLeave={forceHideLeftMenu}
           >
             <a
-              onClick={this.showAccountDialog}
-              className="w-account-menu"
-              draggable="false"
-            >
-              <span className="glyphicon glyphicon-user"></span>
-              <i className="w-left-menu-name">Account</i>
-            </a>
-            <a
               onClick={this.showNetwork}
               className={
-                'w-network-menu' + (name == 'network' ? ' w-menu-selected' : '')
+                'w-network-menu' + (isNetwork ? ' w-menu-selected' : '')
               }
               style={{ display: rulesMode ? 'none' : undefined }}
               draggable="false"
@@ -4236,9 +4285,9 @@ var Index = React.createClass({
               onClick={this.showRules}
               className={
                 'w-save-menu w-rules-menu' +
-                (name == 'rules' ? ' w-menu-selected' : '')
+                (isRules ? ' w-menu-selected' : '')
               }
-              style={{ display: pluginsMode ? 'none' : undefined }}
+              style={hideEditorStyle}
               draggable="false"
             >
               <span
@@ -4261,9 +4310,9 @@ var Index = React.createClass({
               onClick={this.showValues}
               className={
                 'w-save-menu w-values-menu' +
-                (name == 'values' ? ' w-menu-selected' : '')
+                (isValues ? ' w-menu-selected' : '')
               }
-              style={{ display: pluginsMode ? 'none' : undefined }}
+              style={hideEditorStyle}
               draggable="false"
             >
               <span className="glyphicon glyphicon-folder-close"></span>
@@ -4280,11 +4329,9 @@ var Index = React.createClass({
             <a
               onClick={this.showPlugins}
               className={
-                'w-plugins-menu' + (name == 'plugins' ? ' w-menu-selected' : '')
+                'w-plugins-menu' + (isPlugins ? ' w-menu-selected' : '')
               }
-              style={{
-                display: rulesOnlyMode || pluginsOnlyMode ? 'none' : undefined
-              }}
+              style={pluginsStyle}
               draggable="false"
             >
               <span
@@ -4295,13 +4342,21 @@ var Index = React.createClass({
               ></span>
               <i className="w-left-menu-name">Plugins</i>
             </a>
+            <a
+              onClick={this.showAccount}
+              className={'w-account-menu' + (isAccount ? ' w-menu-selected' : '')}
+              draggable="false"
+            >
+              <span className="glyphicon glyphicon-user" />
+              <i className="w-left-menu-name">Account</i>
+            </a>
           </div>
           {state.hasRules || state.hasValues ? (
             <Divider 
               vertical={true} 
               // size='100px'
               color='pink'
-              hide={(name == 'rules' || name =='values') ? false : true}
+              hide={!isRules && !isValues}
             >
               <List
                 ref="rules"
@@ -4332,10 +4387,13 @@ var Index = React.createClass({
               />
             </Divider>
           ) : undefined}
+          {state.hasAccount ? (
+            <Account hide={!isAccount} />
+          ) : undefined}
           {state.hasNetwork ? (
             <Network
               ref="network"
-              hide={name === 'rules' || name === 'values' || name === 'plugins'}
+              hide={!isNetwork}
               modal={modal}
             />
           ) : undefined}
@@ -4347,7 +4405,7 @@ var Index = React.createClass({
               onActive={this.activePluginTab}
               onChange={this.disablePlugin}
               ref="plugins"
-              hide={name == 'plugins' ? false : true}
+              hide={!isPlugins}
             />
           ) : undefined}
         </div>
@@ -4602,7 +4660,6 @@ var Index = React.createClass({
             </div>
           </div>
         </div>
-        <AccountDialog ref="accountDialog" />
         <AccountDialog ref="editorWin" className="w-editor-win" />
         <Dialog ref="setReplayCount" wstyle="w-replay-count-dialog">
           <div className="modal-body">

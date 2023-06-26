@@ -1,3 +1,17 @@
+# v2.9.52
+1. feat: 跨域请求本地替换自动设置 cors，可以通过 `disable://autoCors` 或 `lineProps://disableAutoCors` 关闭
+
+# v2.9.51
+1. fix: https://github.com/avwo/whistle/issues/912
+# v2.9.50
+1. fix: Node 20.1.0 版本 `http.request` 只支持通过 `options.search` 设置参数问题
+2. feat: 支持通过 `--uiport "127.0.0.1:8080"` 限制 WebUI 只能通过指定网卡和端口访问
+
+# v2.9.49
+1. fix: `headerReplace://req.host:pattern=value` 无效问题
+2. feat: 插件添加 `sharedStorage` 方便插件在不同实例中共享存储数据
+3. style: https://github.com/avwo/whistle/pull/898
+
 # v2.9.48
 1. feat: 插件扩展的右键菜单和 Tab 添加 `exportSessions(sessions, type, name)` 方法
 2. feat: 插件 server 的 options 添加 `generateSaz(sessions): Buffer` 和 `extract(saz: Buffer, cb(sessions))` 方法
