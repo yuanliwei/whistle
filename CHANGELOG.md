@@ -1,3 +1,40 @@
+
+# v2.9.58
+1. feat: Network 右键菜单 Mock > Export，通过插件或拖拽导入 Mock 数据
+2. feat: 插件支持 `window.whistleBridge.download({name, value[, base64]})` 下载指定数据
+3. feat: 新增特殊路径 `/_WHISTLE_5b6af7b9884e1165_/`，Whistle 会自动将url 里面第一个此路径片段替换成 `/`
+
+# v2.9.57
+1. feat: Composer 添加修改请求参数按钮 `Params`
+2. feat: Composer 面板优化
+3. feat: Composer 添加 Cookies 按钮方便获取当前抓包记录里面对应域名的 Cookie
+4. feat: 支持通过启动参数 `uiExt` 往页面注入 js 或 html （把 Whistle 作为第三方 npm 包使用时可用）
+	``` js
+	uiExt?: {
+    required?: boolean;
+    htmlPrepend?: string;
+    htmlAppend?: string;
+    jsPrepend?: string;
+    jsAppend?: string;
+  };
+	```
+
+# v2.9.56
+1. feat: 支持通过 `Online / IPv6-only network` 强制 dns 获取 ipv6（命令行版本还可以通过 `-M ipv6Only` 开启）
+2. feat: `w2 add` 命令支持 `type: module`
+# v2.9.55
+1. feat: 显示 `captureError`，且可以通过插件获取到这类型错误的抓包数据
+2. fix: 完善 `refreshPlugins` 方法（内部方法）
+
+# v2.9.54
+1. fix: 修复 Dark Mode 模式下图片显示问题
+2. fix: JSON 过滤搜索时保留数组的 index
+
+# v2.9.53
+1. feat: 支持通过 `enable://forHttp|forHttps` 设置 `enable://capture` 只对 http 或 https 生效
+2. feat: 支持通过请求参数设置登录态
+3. feat: 支持 `Dark Mode`，且可以通过界面 `Online -> 打开对话框 -> Disable dark mode` 关闭自动切换 `Dark Mode`
+
 # v2.9.52
 1. feat: 跨域请求本地替换自动设置 cors，可以通过 `disable://autoCors` 或 `lineProps://disableAutoCors` 关闭
 

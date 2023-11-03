@@ -537,6 +537,11 @@ $.extend(
       addRulesAndValues: {
         url: 'cgi-bin/add-rules-values',
         contentType: 'application/json'
+      },
+      setIPv6Only: 'cgi-bin/set-ipv6-only',
+      createTempFile: {
+        url: 'cgi-bin/sessions/create-temp-file',
+        contentType: 'application/json'
       }
     },
     POST_CONF
@@ -549,7 +554,8 @@ $.extend(
       donotShowAgain: 'cgi-bin/do-not-show-again',
       checkUpdate: 'cgi-bin/check-update',
       importRemote: 'cgi-bin/import-remote',
-      getHistory: 'cgi-bin/history'
+      getHistory: 'cgi-bin/history',
+      getCookies: 'cgi-bin/sessions/cookies'
     },
     GET_CONF
   )
@@ -978,7 +984,7 @@ function startLoadData() {
         lastSvrLogTime = data.lastSvrLogId;
       }
       data = data.data;
-      var hasChhanged;
+      var hasChanged;
       var framesLen = data.frames && data.frames.length;
 
       if (framesLen) {
@@ -992,18 +998,18 @@ function startLoadData() {
         if (status) {
           curActiveItem.closed = undefined;
           if (status.sendStatus > -1) {
-            hasChhanged = curActiveItem.sendStatus !== status.sendStatus;
+            hasChanged = curActiveItem.sendStatus !== status.sendStatus;
             curActiveItem.sendStatus = status.sendStatus;
           }
           if (status.receiveStatus > -1) {
-            hasChhanged =
-              hasChhanged ||
+            hasChanged =
+              hasChanged ||
               curActiveItem.receiveStatus !== status.receiveStatus;
             curActiveItem.receiveStatus = status.receiveStatus;
           }
         } else {
           if (!curActiveItem.closed) {
-            hasChhanged = true;
+            hasChanged = true;
             curActiveItem.closed = true;
           }
         }
@@ -1019,7 +1025,7 @@ function startLoadData() {
         (!data.ids.length && !data.newIds.length) ||
         networkModal.clearNetwork
       ) {
-        if (hasChhanged || framesLen) {
+        if (hasChanged || framesLen) {
           framesUpdateCallbacks.forEach(function (cb) {
             cb();
           });
@@ -1529,6 +1535,7 @@ function getMenus(menuName) {
           menu.mtime = plugin.mtime;
           menu.priority = plugin.priority;
           menu._key = name;
+          menu._urlPattern = util.toRegExp(menu.urlPattern);
           list.push(menu);
         });
       }

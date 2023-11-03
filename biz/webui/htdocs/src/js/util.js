@@ -23,7 +23,8 @@ var INDEX_RE = /^\[(\d+)\]$/;
 var ARR_FILED_RE = /(.)?(?:\[(\d+)\])$/;
 var LEVELS = ['fatal', 'error', 'warn', 'info', 'debug'];
 var MAX_CURL_BODY = 1024 * 72;
-var useCustomEditor = window.location.search.indexOf('useCustomEditor') !== -1;
+var search = (window.location.search || '').substring(1);
+var useCustomEditor = search.indexOf('useCustomEditor') !== -1;
 var JSON_RE = /^\s*(?:\{[\w\W]*\}|\[[\w\W]*\])\s*$/;
 var isJSONText;
 
@@ -36,6 +37,13 @@ function noop(_) {
 }
 
 exports.noop = noop;
+
+exports.getQuery = function() {
+  if (typeof search === 'string') {
+    search = parseQueryString(search);
+  }
+  return search;
+};
 
 function likeJson(str) {
   return str && JSON_RE.test(str);
@@ -58,9 +66,17 @@ function comparePlugin(p1, p2) {
 exports.compare = compare;
 exports.comparePlugin = comparePlugin;
 
-exports.isString = function (str) {
+function isString(str) {
   return typeof str === 'string';
-};
+}
+
+exports.isString = isString;
+
+function getString(str) {
+  return isString(str) ? str : '';
+}
+
+exports.getString = getString;
 
 function notEStr(str) {
   return str && typeof str === 'string';
@@ -412,6 +428,9 @@ function getHost(url) {
   start = start == -1 ? 0 : start + 3;
   var end = url.indexOf('/', start);
   url = end == -1 ? url.substring(start) : url.substring(start, end);
+  if (url && (url.indexOf('?') !== -1 || url.indexOf('#') !== -1)) {
+    url = url.replace(/[?#].*$/, '');
+  }
   return url;
 }
 
@@ -565,9 +584,9 @@ function getContentEncoding(headers) {
   return encoding === 'gzip' || encoding === 'deflate' ? encoding : null;
 }
 
-exports.getOriginalReqHeaders = function (item) {
+exports.getOriginalReqHeaders = function (item, rulesHeaders) {
   var req = item.req;
-  var headers = $.extend({}, req.headers, item.rulesHeaders, true);
+  var headers = $.extend({}, req.headers, rulesHeaders || item.rulesHeaders, true);
   if (item.clientId && !headers['x-whistle-client-id']) {
     headers['x-whistle-client-id'] = item.clientId;
   }
@@ -936,6 +955,44 @@ function openEditor(value) {
 
 exports.openEditor = openEditor;
 
+exports.openInNewWin = function(value) {
+  var win = window.open('editor.html');
+  win.getValue = function () {
+    return value;
+  };
+  if (win.setValue) {
+    win.setValue(value);
+  }
+};
+
+function getMockValues(values) {
+  if (!values || (!isString(values.value) && !isString(values.base64)) ||
+    (!values.isFile && !notEStr(values.name))) {
+    return;
+  }
+  return values;
+}
+
+function getMockData(data) {
+  if (!Array.isArray(data) || data.length > 2 || !notEStr(data[0])) {
+    return;
+  }
+  return {
+    rules: data[0].substring(0, 3000),
+    values: getMockValues(data[1])
+  };
+}
+
+function handleMockData(data) {
+  var mockData = getMockData(data);
+  if (mockData) {
+    events.trigger('showRulesDialog', mockData);
+  }
+  return mockData;
+}
+
+exports.handleMockData = handleMockData;
+
 var rentity = /['<> "&]/g;
 var entities = {
   '"': '&quot;',
@@ -1052,7 +1109,7 @@ exports.asCURL = function (item) {
   if (body && (body.length <= MAX_CURL_BODY || isText(req.headers) || isUrlEncoded(req))) {
     result.push('-d', formatBody(body));
   }
-  return result.join(' ');
+  return result.join(' ').replace(/!/g, '\\!');
 };
 
 exports.parseHeadersFromHar = function (list) {
@@ -1204,18 +1261,13 @@ exports.triggerListChange = function (name, data) {
   } catch (e) {}
 };
 
-var REG_EXP = /^\/(.+)\/(i?m?|m?i)$/;
+var REG_EXP = /^\/(.+)\/([miu]{0,3})$/;
 exports.toRegExp = function (regExp) {
-  if (!regExp) {
-    return;
+  if (regExp && REG_EXP.test(regExp)) {
+    try {
+      return new RegExp(RegExp.$1, RegExp.$2);
+    } catch (e) {}
   }
-  regExp = REG_EXP.test(regExp);
-  try {
-    regExp = regExp && new RegExp(RegExp.$1, RegExp.$2);
-  } catch (e) {
-    return;
-  }
-  return regExp;
 };
 
 function getPadding(len) {
@@ -1684,20 +1736,27 @@ exports.readFileAsText = function (file, callback) {
   return readFile(file, callback, 'text');
 };
 
-exports.addPluginMenus = function (item, list, maxTop, disabled, treeId) {
+exports.addPluginMenus = function (item, list, maxTop, disabled, treeId, url) {
   var pluginsList = (item.list = list);
   var count = pluginsList.length;
   if (count) {
     item.hide = false;
     var disabledOthers = disabled;
+    var curUrl = treeId || url;
     for (var j = 0; j < count; j++) {
       var plugin = pluginsList[j];
+      var pattern = plugin._urlPattern;
       if (plugin.required || plugin.requiredTreeNode) {
         var disd = disabled && (!plugin.requiredTreeNode || !treeId);
+        if (!disd && (pattern && (!curUrl || !pattern.test(curUrl)))) {
+          disd = true;
+        }
         plugin.disabled = disd;
         if (!disd) {
           disabledOthers = false;
         }
+      } else if (pattern && (!curUrl || !pattern.test(curUrl))) {
+        plugin.disabled = true;
       } else {
         disabledOthers = plugin.disabled = false;
       }
@@ -2305,6 +2364,10 @@ exports.toHar = function (item) {
     whistleVersion: item.version,
     whistleNodeVersion: item.nodeVersion,
     whistleRealUrl: item.realUrl,
+    whistleCaptureError: item.captureError,
+    whistleReqError: item.reqError,
+    whistleIsHttps: item.isHttps,
+    whistleResError: item.resError,
     whistleTimes: {
       startTime: item.startTime,
       dnsTime: item.dnsTime,
@@ -2393,6 +2456,7 @@ function filterJson(obj, keyword, filterType) {
   }
   var type = typeof obj;
   var isKey = filterType === 1;
+  var isVal = filterType > 1;
   if (type === 'string' || type === 'number' || type === 'boolean') {
     return !isKey && String(obj).toLowerCase().indexOf(keyword) !== -1;
   }
@@ -2400,15 +2464,18 @@ function filterJson(obj, keyword, filterType) {
     return false;
   }
   if (Array.isArray(obj)) {
+    var idx = [];
     for (var i = obj.length - 1; i >=0; i--) {
-      if (!filterJson(obj[i], keyword, filterType)) {
+      if ((isVal || (i + '').indexOf(keyword) === -1) && !filterJson(obj[i], keyword, filterType)) {
         obj.splice(i, 1);
+      } else {
+        idx.push(i);
       }
     }
+    obj._idx = idx.reverse();
     return obj.length;
   }
   Object.keys(obj).forEach(function(key) {
-    var isVal = filterType > 1;
     var hasKey = !isVal && key.toLowerCase().indexOf(keyword) !== -1;
     if (isKey && hasKey) {
       return true;
@@ -2432,3 +2499,58 @@ exports.filterJsonText = function(str, keyword, filterType) {
   }
   return obj;
 };
+
+
+var URL_RE = /^(?:([a-z0-9.+-]+:)?\/\/)?([^/?#]+)(\/[^?#]*)?(\?[^#]*)?(#.*)?$/i;
+var HOST_RE = /^(.+)(?::(\d*))$/;
+var BRACKET_RE = /^\[|\]$/g;
+
+exports.parseUrl = function (url) {
+  if (!URL_RE.test(url)) {
+    return;
+  }
+  var protocol = RegExp.$1 || 'http:';
+  var host = RegExp.$2;
+  var pathname = RegExp.$3 || '/';
+  var search = RegExp.$4;
+  var hash = RegExp.$5 || null;
+  var port = null;
+  var hostname = host;
+  if (HOST_RE.test(host)) {
+    hostname = RegExp.$1;
+    port = RegExp.$2;
+  }
+
+  return {
+    protocol: protocol,
+    slashes: true,
+    auth: null,
+    host: host,
+    port: port,
+    hostname: hostname.replace(BRACKET_RE, ''),
+    hash: hash,
+    search: search || null,
+    query: search ? search.substring(1) : null,
+    pathname: pathname,
+    path: pathname + search,
+    href: url
+  };
+};
+
+exports.replacQuery = function(url, query) {
+  var index = url.indexOf('#');
+  var hash = '';
+  if (index !== -1) {
+    hash = url.substring(index);
+    url = url.substring(0, index);
+  }
+  if (query) {
+    query = '?' + query;
+  }
+  index = url.indexOf('?');
+  if (index !== -1) {
+    url = url.substring(0, index);
+  }
+  return url + query + hash;
+};
+

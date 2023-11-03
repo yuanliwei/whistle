@@ -27,10 +27,12 @@ var message = require('./message');
 var UpdateAllBtn = require('./update-all-btn');
 var ContextMenu = require('./context-menu');
 var CertsInfoDialog = require('./certs-info-dialog');
+var RulesDialog = require('./rules-dialog');
 var SyncDialog = require('./sync-dialog');
 var AccountDialog = require('./account-dialog');
 var JSONDialog = require('./json-dialog');
 var Account = require('./account');
+var MockDialog = require('./mock-dialog');
 var win = require('./win');
 var Divider = require('./divider');
 var {load} = require('./components/editor/MonacoLoader.js');
@@ -40,7 +42,7 @@ var JSON_RE = /^\s*(?:[\{｛][\w\W]+[\}｝]|\[[\w\W]+\])\s*$/;
 var DEFAULT = 'Default';
 var MAX_PLUGINS_TABS = 7;
 var MAX_FILE_SIZE = 1024 * 1024 * 128;
-var MAX_OBJECT_SIZE = 1024 * 1024 * 6;
+var MAX_OBJECT_SIZE = 1024 * 1024 * 36;
 var MAX_LOG_SIZE = 1024 * 1024 * 2;
 var MAX_REPLAY_COUNT = 100;
 var LINK_SELECTOR = '.cm-js-type, .cm-js-http-url, .cm-string, .cm-js-at';
@@ -53,6 +55,7 @@ var OPTIONS_WITH_SELECTED = [
 ];
 var HIDE_STYLE = { display: 'none' };
 var search = window.location.search;
+var isClient = util.getQuery().mode === 'client';
 var hideLeftMenu;
 var showTreeView;
 
@@ -163,10 +166,21 @@ function checkJson(item) {
   }
 }
 
+function checkConflict(data, modal) {
+  var keys = Object.keys(data);
+  for (var i = 0, len = keys.length; i < len; i++) {
+    var name = keys[i];
+    var item = modal.get(name);
+    if (item && item.value !== data[name]) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function getJsonForm(data, name) {
-  data = JSON.stringify(data);
   var form = new FormData();
-  var file = new File([data], 'data.json', { type: 'application/json' });
+  var file = new File([JSON.stringify(data)], 'data.json', { type: 'application/json' });
   form.append(name || 'rules', file);
   return form;
 }
@@ -208,6 +222,37 @@ function getRemoteDataHandler(callback) {
   };
 }
 
+function readFileJson(file, cb) {
+  if (util.isString(file)) {
+    if (file.length > MAX_OBJECT_SIZE) {
+      win.alert('The file size is too large.');
+      return cb();
+    }
+    return cb(parseJSON(file));
+  }
+  if (!file || !/\.(txt|json)$/i.test(file.name)) {
+    win.alert('Only supports .txt or .json file.');
+    return cb();
+  }
+
+  if (file.size > MAX_OBJECT_SIZE) {
+    win.alert('The file size is too large.');
+    return cb();
+  }
+  util.readFileAsText(file, function(text) {
+    cb(parseJSON(text));
+  });
+}
+
+function handleImportData(file, cb, name) {
+  readFileJson(file, function(data) {
+    if (!data || util.handleMockData(data)) {
+      return cb();
+    }
+    cb(data);
+  });
+}
+
 function getPageName(options) {
   var hash = location.hash.substring(1);
   if (hash) {
@@ -234,8 +279,19 @@ function getPageName(options) {
   if (options.pluginsMode) {
     return hash !== 'plugins' ? 'network' : hash;
   }
-
+  if (isClient && !hash) {
+    return storage.get('pageName') || 'network';
+  }
   return hash;
+}
+
+function parseJSON(text) {
+  try {
+    var obj = JSON.parse(text);
+    return obj && typeof obj === 'object' ? obj : null;
+  } catch (e) {
+    message.error(e.message);
+  }
 }
 
 function compareSelectedNames(src, target) {
@@ -761,6 +817,7 @@ var Index = React.createClass({
     } else {
       this.showNetwork();
     }
+    storage.set('pageName', pageName || '');
   },
   componentDidMount: function () {
     var self = this;
@@ -778,6 +835,19 @@ var Index = React.createClass({
     var preventDefault = function (e) {
       e.preventDefault();
     };
+    events.on('showRulesDialog', function(_, data) {
+      if (data && !self.isHideRules()) {
+        self.refs.rulesDialog.show(data.rules, data.values);
+      }
+    });
+    events.on('download', function(_, data) {
+      self.download(data);
+    });
+    events.on('showMockDialog', function(_, data) {
+      if (data) {
+        self.refs.mockDialog.show(data.item, data.type);
+      }
+    });
     events.on('enableRecord', function () {
       self.enableRecord();
     });
@@ -829,6 +899,9 @@ var Index = React.createClass({
     });
     var editorWin;
     events.on('openEditor', function(_, text) {
+      if (storage.get('viewAllInNewWindow') === '1') {
+        return util.openInNewWin(text || '');
+      }
       try {
         if (editorWin && typeof editorWin.setValue === 'function') {
           window.getTextFromWhistle_ = null;
@@ -840,6 +913,12 @@ var Index = React.createClass({
           editorWin.setValue(text);
         };
         self.refs.editorWin.show('editor.html');
+      } catch (e) {}
+    });
+    events.on('openInNewWin', function() {
+      try {
+        util.openInNewWin(editorWin.getEditorValue() || '');
+        self.refs.editorWin.hide();
       } catch (e) {}
     });
 
@@ -856,14 +935,18 @@ var Index = React.createClass({
 
     events.on('addNewRulesFile', function(_, data) {
       var filename = data.filename;
-      var item = self.state.rules.add(filename, data.data);
+      var modal = self.state.rules;
+      var item = modal.add(filename, data.data);
+      modal.setChanged(filename, false);
       self.setRulesActive(filename);
       self.setState({ activeRules: item });
       self.triggerRulesChange('create');
     });
     events.on('addNewValuesFile', function(_, data) {
       var filename = data.filename;
-      var item = self.state.values.add(filename, data.data);
+      var modal = self.state.values;
+      var item = modal.add(filename, data.data);
+      modal.setChanged(filename, false);
       self.setValuesActive(filename);
       self.setState({ activeValues: item });
       self.triggerValuesChange('create');
@@ -982,19 +1065,21 @@ var Index = React.createClass({
           data.append('importSessions', files[0]);
           self.uploadSessionsForm(data);
         }
-        if (target.closest('.w-divider-left').length) {
-          if (name === 'rules') {
-            data = new FormData();
-            data.append('rules', files[0]);
-            self.rulesForm = data;
-            self.refs.confirmImportRules.show();
-          } else if (name === 'values') {
-            data = new FormData();
-            data.append('values', files[0]);
-            self.valuesForm = data;
-            self.refs.confirmImportValues.show();
-          }
+        const overLeftBar = target.closest('.w-divider-left').length;
+        const overPlugins = name === 'plugins';
+        if ((!overLeftBar && !overPlugins) || self.isHideRules()) {
+          return;
         }
+        handleImportData(file, function(json) {
+          if (!json || !overLeftBar) {
+            return;
+          }
+          if (name === 'rules') {
+            self.handleImportRules(json);
+          } else if (name === 'values') {
+            self.handleImportValues(json);
+          }
+        });
       })
       .on('keydown', function (e) {
         if ((e.metaKey || e.ctrlKey) && e.keyCode === 82) {
@@ -1199,7 +1284,7 @@ var Index = React.createClass({
         list[3].checked = !state.disabledAllRules;
         list[4].checked = !state.disabledAllPlugins;
         self.refs.contextMenu.update();
-        return;
+        return self.setState({});
       }
     });
     dataCenter.on('rules', function (data) {
@@ -1481,7 +1566,7 @@ var Index = React.createClass({
     return true;
   },
   importAnySessions: function (data) {
-    if (data) {
+    if (data && !util.handleMockData(data)) {
       if (Array.isArray(data)) {
         dataCenter.addNetworkList(data);
       } else {
@@ -1884,9 +1969,8 @@ var Index = React.createClass({
           return;
         }
         self.refs.importRemoteRules.hide();
-        if (data) {
-          self.rulesForm = getJsonForm(data);
-          self.refs.confirmImportRules.show();
+        if (data && !util.handleMockData(data)) {
+          self.handleImportRules(data);
         }
       })
     );
@@ -1924,9 +2008,8 @@ var Index = React.createClass({
           return;
         }
         self.refs.importRemoteValues.hide();
-        if (data) {
-          self.valuesForm = getJsonForm(data, 'values');
-          self.refs.confirmImportValues.show();
+        if (data && !util.handleMockData(data)) {
+          self.handleImportValues(data);
         }
       })
     );
@@ -1958,57 +2041,57 @@ var Index = React.createClass({
       }
     });
   },
-  uploadRules: function (e) {
-    var data = this.rulesForm;
-    this.rulesForm = null;
+  handleImportRules: function(data) {
     if (!data) {
       return;
     }
-    var file = data.get('rules');
-    if (!file || !/\.(txt|json)$/i.test(file.name)) {
-      return win.alert('Only supports .txt or .json file.');
+    this.rulesForm = getJsonForm(data);
+    if (checkConflict(data, this.state.rules)) {
+      this.refs.confirmImportRules.show();
+    } else {
+      this.uploadRules();
     }
-
-    if (file.size > MAX_OBJECT_SIZE) {
-      return win.alert('The file size cannot exceed 6m.');
+  },
+  handleImportValues: function(data) {
+    if (!data) {
+      return;
     }
-    if ($(e.target).hasClass('btn-danger')) {
-      data.append('replaceAll', '1');
+    this.valuesForm = getJsonForm(data, 'values');
+    this.refs.confirmImportValues.show();
+  },
+  uploadRules: function (e) {
+    var form = this.rulesForm;
+    self.rulesForm = null;
+    if (form) {
+      if (!e || $(e.target).hasClass('btn-danger')) {
+        form.append('replaceAll', '1');
+      }
+      this._uploadRules(form);
+      ReactDOM.findDOMNode(this.refs.importRules).value = '';
     }
-    this._uploadRules(data);
-    ReactDOM.findDOMNode(this.refs.importRules).value = '';
   },
   uploadValues: function (e) {
-    var data = this.valuesForm;
-    this.valuesForm = null;
-    if (!data) {
-      return;
+    var form = this.valuesForm;
+    self.valuesForm = null;
+    if (form) {
+      if (!e || $(e.target).hasClass('btn-danger')) {
+        form.append('replaceAll', '1');
+      }
+      this._uploadValues(form);
+      ReactDOM.findDOMNode(this.refs.importValues).value = '';
     }
-    var file = data.get('values');
-    if (!file || !/\.(txt|json)$/i.test(file.name)) {
-      return win.alert('Only supports .txt or .json file.');
-    }
-
-    if (file.size > MAX_OBJECT_SIZE) {
-      return win.alert('The file size cannot exceed 6m.');
-    }
-    if ($(e.target).hasClass('btn-danger')) {
-      data.append('replaceAll', '1');
-    }
-    this._uploadValues(data);
-    ReactDOM.findDOMNode(this.refs.importValues).value = '';
   },
   uploadRulesForm: function () {
-    this.rulesForm = new FormData(
+    var form = new FormData(
       ReactDOM.findDOMNode(this.refs.importRulesForm)
     );
-    this.refs.confirmImportRules.show();
+    handleImportData(form.get('rules'), this.handleImportRules);
   },
   uploadValuesForm: function () {
-    this.valuesForm = new FormData(
+    var form = new FormData(
       ReactDOM.findDOMNode(this.refs.importValuesForm)
     );
-    this.refs.confirmImportValues.show();
+    handleImportData(form.get('values'), this.handleImportValues);
   },
   showAndActiveRules: function (item, e) {
     if (this.state.name === 'rules') {
@@ -3295,6 +3378,10 @@ var Index = React.createClass({
         fwdHost: entry.whistleFwdHost,
         sniPlugin: entry.whistleSniPlugin,
         rules: entry.whistleRules || {},
+        captureError: entry.whistleCaptureError,
+        isHttps: entry.whistleIsHttps,
+        reqError: entry.whistleReqError,
+        resError: entry.whistleResError,
         version: entry.whistleVersion,
         nodeVersion: entry.whistleNodeVersion
       };
@@ -3336,14 +3423,14 @@ var Index = React.createClass({
     if (file.size > MAX_FILE_SIZE) {
       return win.alert('The file size cannot exceed 64m.');
     }
-    var isText = /\.txt$/i.test(file.name);
+    var isText = /\.(?:txt|json)$/i.test(file.name);
     if (isText || /\.har$/i.test(file.name)) {
       var self = this;
       util.readFileAsText(file, function (result) {
         try {
           result = JSON.parse(result);
           if (isText) {
-            dataCenter.addNetworkList(result);
+            dataCenter.importAnySessions(result);
           } else {
             self.importHarSessions(result);
           }
@@ -3553,6 +3640,17 @@ var Index = React.createClass({
       this.toggleTreeView();
     }
   },
+  download: function(data) {
+    if (!data || !(util.isString(data.content) ||
+      util.isString(data.value) || util.isString(data.base64))) {
+      return;
+    }
+    var base64 = util.getString(data.base64);
+    ReactDOM.findDOMNode(this.refs.filename).value = util.getString(data.name);
+    ReactDOM.findDOMNode(this.refs.dataType).value = base64 ? 'rawBase64' : '';
+    ReactDOM.findDOMNode(this.refs.content).value = base64 || util.getString(data.value|| data.content);
+    ReactDOM.findDOMNode(this.refs.downloadForm).submit();
+  },
   getTabName: function () {
     var state = this.state;
     var rulesMode = state.rulesMode;
@@ -3573,6 +3671,9 @@ var Index = React.createClass({
       name = name !== 'plugins' ? 'network' : name;
     }
     return name || 'network';
+  },
+  isHideRules: function() {
+    return this.state.networkMode || this.state.pluginsMode;
   },
   render: function () {
     var state = this.state;
@@ -3708,7 +3809,7 @@ var Index = React.createClass({
       caUrl += '?type=' + caType;
       caShortUrl += caType;
     }
-    var hideEditor = pluginsMode || networkMode;
+    var hideEditor = this.isHideRules();
     var hideEditorStyle = hideEditor ? HIDE_STYLE : null;
     dataCenter.hideMockMenu = hideEditor;
 
@@ -4826,7 +4927,7 @@ var Index = React.createClass({
                   href="https://avwo.github.io/whistle/update.html"
                   target="_blank"
                 >
-                  Update now
+                  View Update Guide
                 </a>
               </div>
             </div>
@@ -4988,6 +5089,19 @@ var Index = React.createClass({
         <SyncDialog ref="syncDialog" />
         <JSONDialog ref="jsonDialog" />
         <div id="copyTextBtn" style={{display: 'none'}} />
+        <MockDialog ref="mockDialog" />
+        <RulesDialog ref="rulesDialog" />
+        <form
+          ref="downloadForm"
+          action="cgi-bin/download"
+          style={{ display: 'none' }}
+          method="post"
+          target="downloadTargetFrame"
+        >
+          <input ref="dataType" name="type" type="hidden" />
+          <input ref="filename" name="filename" type="hidden" />
+          <input ref="content" name="content" type="hidden" />
+        </form>
       </div>
     );
   }

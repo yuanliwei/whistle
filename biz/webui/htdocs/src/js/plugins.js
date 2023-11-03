@@ -25,6 +25,14 @@ function getPluginComparator(plugins) {
   };
 }
 
+function handlePlugins(data, xhr) {
+  if (!data) {
+    util.showSystemError(xhr);
+    return;
+  }
+  message.success('Request successful, the list of plugins will update itself.');
+}
+
 function enableAllPlugins(e) {
   if (pendingEnable) {
     return;
@@ -133,19 +141,13 @@ var Home = React.createClass({
     if (!cmd) {
       return;
     }
-    if (install && state.registry) {
+    if (state.registryList && state.registry) {
       cmd += ' --registry=' + state.registry;
     }
     var isInstall = install || cmd.indexOf('w2 install ') === 0;
     dataCenter.plugins[(isInstall ? '' : 'un' ) + 'installPlugins']({
       cmd: cmd
-    }, function (data, xhr) {
-      if (!data) {
-        util.showSystemError(xhr);
-        return;
-      }
-      message.success('Request successful, please wait patiently for the result.');
-    });
+    }, handlePlugins);
   },
   onOpen: function (e) {
     this.props.onOpen && this.props.onOpen(e);
@@ -172,12 +174,7 @@ var Home = React.createClass({
     );
   },
   onCmdChange: function (e) {
-    var msg = e.target.value;
-    if (this.state.install) {
-      this.setState({ installMsg: msg });
-    } else {
-      this.setState({ cmdMsg: msg });
-    }
+    this.updateCmdMsg(e.target.value);
   },
   showMsgDialog: function () {
     var self = this;
@@ -188,8 +185,35 @@ var Home = React.createClass({
       }, 600);
     }
   },
+  updateCmdMsg: function(msg, cb) {
+    if (this.state.install) {
+      this.setState({ installMsg: msg }, cb);
+    } else {
+      this.setState({ cmdMsg: msg }, cb);
+    }
+  },
   onRegistry: function(e) {
     var registry = e.target.value;
+    if (registry === '+Add') {
+      var textarea = ReactDOM.findDOMNode(this.refs.textarea);
+      var pkgs = [];
+      var regs = [];
+      var regCmdName = '--registry=';
+      textarea.value.trim().split(/\s+/).forEach(function(cmd) {
+        if (cmd.indexOf(regCmdName)) {
+          pkgs.push(cmd);
+        } else {
+          regs.push(cmd);
+        }
+      });
+      if (!regs.length) {
+        regs.push(regCmdName);
+      }
+      this.updateCmdMsg(pkgs.concat(regs).join(' '), function() {
+        textarea.focus();
+      });
+      return;
+    }
     this.setState({ registry: registry });
     storage.set('pluginsRegistry', registry);
   },
@@ -231,6 +255,15 @@ var Home = React.createClass({
     var registry = isSys ? null : plugin.registry;
     var registryList = null;
     var registryCmd = registry ? ' --registry=' + registry : '';
+    if (dataCenter.enablePluginMgr) {
+      var cmd = plugin.moduleName;
+      win.confirm('Are you sure to uninstall plugin \'' + cmd + '\'.', function(ok) {
+        if (ok) {
+          dataCenter.plugins.uninstallPlugins({ cmd: cmd }, handlePlugins);
+        }
+      });
+      return;
+    }
     var update = function() {
       self.setState(
         {
@@ -275,6 +308,7 @@ var Home = React.createClass({
     var state = self.state || {};
     var plugin = state.plugin || {};
     var install = state.install;
+    var epm = dataCenter.enablePluginMgr;
     var cmdMsg = install ? state.installMsg : state.cmdMsg;
     var list = Object.keys(plugins);
     var disabledPlugins = data.disabledPlugins || {};
@@ -284,11 +318,12 @@ var Home = React.createClass({
     var ndp = data.ndp;
     self.hasNewPlugin = false;
 
-    if (!install && cmdMsg && registry) {
+    if (!epm && cmdMsg && registry) {
+      var regCmd = ' --registry=' + registry;
       cmdMsg = cmdMsg.split('\n').map(function(line) {
         line = line.trim();
         if (line) {
-          line += ' --registry=' + registry;
+          line += regCmd;
         }
         return line;
       }).join('\n');
@@ -548,9 +583,9 @@ var Home = React.createClass({
             <textarea
               ref="textarea"
               value={cmdMsg || ''}
-              readOnly={!install}
-              placeholder={install ? 'e.g.: whistle.inspect whistle.abc@1.0.0 @org/whistle.xxx' : undefined}
-              className="w-plugin-update-cmd"
+              readOnly={!epm}
+              placeholder={install ? 'Such as: whistle.inspect whistle.abc@1.0.0 @org/whistle.xxx' : undefined}
+              className={'w-plugin-update-cmd' + (install ? ' w-plugin-install' : '')}
               maxLength={install ? 360 : undefined}
               onChange={this.onCmdChange}
             />
@@ -574,7 +609,7 @@ var Home = React.createClass({
             </div>
           </div>
           <div className="modal-footer">
-            {registryList.length ?<label className="w-registry-list">
+            {registryList.length ? <label className="w-registry-list">
               <strong>--registry=</strong>
               <select className="form-control" value={registry} onChange={this.onRegistry}>
                 <option value="">None</option>
@@ -585,8 +620,15 @@ var Home = React.createClass({
                     );
                   })
                 }
+                {epm ? <option value="+Add">+Add</option> : null}
               </select>
-            </label> : null}
+            </label> : (epm ? <label className="w-registry-list">
+              <strong>--registry=</strong>
+              <select className="form-control" value={registry} onChange={this.onRegistry}>
+                <option value="">None</option>
+                <option value="+Add">+Add</option>
+              </select>
+            </label> : null)}
             <button
               type="button"
               className="btn btn-primary w-copy-text-with-tips"
@@ -595,7 +637,7 @@ var Home = React.createClass({
               onClick={dataCenter.enablePluginMgr ? self.execCmd : null}
               disabled={install && !WHISTLE_PLUGIN_RE.test(cmdMsg)}
             >
-              {dataCenter.enablePluginMgr ? (install ? 'Install' : 'Exec') : 'Copy'}
+              {dataCenter.enablePluginMgr ? (install ? 'Install' : 'Update') : 'Copy'}
             </button>
             <button
               type="button"

@@ -4,7 +4,6 @@ var path = require('path');
 var url = require('url');
 var http = require('http');
 var https = require('https');
-var getAuth = require('basic-auth');
 var parseurl = require('parseurl');
 var bodyParser = require('body-parser');
 var crypto = require('crypto');
@@ -18,6 +17,8 @@ var setProxy = require('./proxy');
 var rulesUtil = require('../../../lib/rules/util');
 var getRootCAFile = require('../../../lib/https/ca').getRootCAFile;
 var config = require('../../../lib/config');
+var sendError = require('../cgi-bin/util').sendError;
+var parseAuth = require('../../../lib/util/common').parseAuth;
 var getWorker = require('../../../lib/plugins/util').getWorker;
 var loadAuthPlugins = require('../../../lib/plugins').loadAuthPlugins;
 
@@ -30,13 +31,14 @@ var uploadJsonParser = bodyParser.json(UPLOAD_PARSE_CONF);
 var GET_METHOD_RE = /^get$/i;
 var WEINRE_RE = /^\/weinre\/.*/;
 var ALLOW_PLUGIN_PATHS = ['/cgi-bin/rules/list2', '/cgi-bin/values/list2', '/cgi-bin/get-custom-certs-info'];
+var SPECIAL_PATHS = ['/cgi-bin/rules/project'];
 var DONT_CHECK_PATHS = ['/cgi-bin/server-info', '/cgi-bin/plugins/is-enable', '/cgi-bin/plugins/get-plugins',
   '/preview.html', '/cgi-bin/rootca', '/cgi-bin/log/set', '/cgi-bin/status'];
 var GUEST_PATHS = ['/cgi-bin/composer', '/cgi-bin/socket/data', '/cgi-bin/abort', '/cgi-bin/socket/abort',
   '/cgi-bin/socket/change-status', '/cgi-bin/sessions/export'];
 var PLUGIN_PATH_RE = /^\/(whistle|plugin)\.([^/?#]+)(\/)?/;
 var STATIC_SRC_RE = /\.(?:ico|js|css|png)$/i;
-var UPLOAD_URLS = ['/cgi-bin/values/upload', '/cgi-bin/composer'];
+var UPLOAD_URLS = ['/cgi-bin/values/upload', '/cgi-bin/composer', '/cgi-bin/download'];
 var proxyEvent, util, pluginMgr;
 var MAX_AGE = 60 * 60 * 24 * 3;
 var MENU_HTML = fs.readFileSync(path.join(__dirname, '../../../assets/menu.html'));
@@ -75,10 +77,20 @@ function getLoginKey (req, res, auth) {
   return shasum([auth.username, password, ip].join('\n'));
 }
 
-function requireLogin(res, msg) {
+function requireLogin(req, res, msg) {
+  if (config.client) {
+    if (config.handleWebReq) {
+      return config.handleWebReq(req, res);
+    }
+    return res.status(404).end();
+  }
   res.setHeader('WWW-Authenticate', ' Basic realm=User Login');
   res.setHeader('Content-Type', 'text/html; charset=utf8');
   res.status(401).end(msg || 'Access denied, please <a href="javascript:;" onclick="location.reload()">try again</a>.');
+}
+
+function equalAuth(auth, src) {
+  return auth.name === src.username && auth.pass === src.password;
 }
 
 function verifyLogin(req, res, auth) {
@@ -105,14 +117,13 @@ function verifyLogin(req, res, auth) {
   if (correctKey === lkey) {
     return true;
   }
-  if (req.query.authorization && !req.headers.authorization) {
-    req.headers.authorization = 'Basic ' + req.query.authorization;
-  }
-  auth = getAuth(req) || {};
+  var headerAuth = parseAuth(req.headers.authorization);
+  var queryAuth = parseAuth(req.query.authorization);
   if (!isGuest && config.encrypted) {
-    auth.pass = shasum(auth.pass);
+    headerAuth.pass = headerAuth.pass && shasum(headerAuth.pass);
+    queryAuth.pass = queryAuth.pass && shasum(queryAuth.pass);
   }
-  if (auth.name === username && auth.pass === password) {
+  if (equalAuth(headerAuth, auth) || equalAuth(queryAuth, auth)) {
     var options = {
       expires: new Date(Date.now() + (MAX_AGE * 1000)),
       maxAge: MAX_AGE,
@@ -133,7 +144,11 @@ function checkAuth(req, res) {
   if (verifyLogin(req, res, auth)) {
     return true;
   }
-  requireLogin(res);
+  if (config.specialAuth && SPECIAL_PATHS.indexOf(req.path) !== -1 &&
+    config.specialAuth === req.headers['x-whistle-special-auth']) {
+    return true;
+  }
+  requireLogin(req, res);
   return false;
 }
 
@@ -186,7 +201,7 @@ app.use(function(req, res, next) {
       return res.redirect(status);
     }
     if (status === 401) {
-      return requireLogin(res, msg);
+      return requireLogin(req, res, msg);
     }
     res.set('Content-Type', 'text/html; charset=utf8');
     if (authUrl) {
@@ -264,8 +279,7 @@ function cgiHandler(req, res) {
     try {
       require(filepath)(req, res);
     } catch(err) {
-      var msg = config.debugMode ? '<pre>' + util.encodeHtml(util.getErrorStack(err)) + '</pre>' : 'Internal Server Error';
-      res.status(500).send(msg);
+      sendError(res, err);
     }
   };
   if (require.cache[filepath]) {
@@ -452,9 +466,27 @@ app.use('/preview.html', function(req, res, next) {
     res.set('content-type', 'text/html;charset=' + charset);
   }
 });
+
+var uiExt = config.uiExt || {};
+var htmlPrepend = uiExt.htmlPrepend;
+var htmlAppend = uiExt.htmlAppend;
+var jsPrepend = uiExt.jsPrepend;
+var jsAppend = uiExt.jsAppend;
+
+function concat(a, b, c) {
+  if (!a && !c) {
+    return b;
+  }
+  var list = [];
+  a && list.push(a);
+  list.push(b);
+  c && list.push(c);
+  return Buffer.concat(list);
+}
+
 if (!config.debugMode) {
-  var indexHtml = fs.readFileSync(htdocs.getHtmlFile('index.html'));
-  var indexJs = fs.readFileSync(htdocs.getJsFile('index.js'));
+  var indexHtml = concat(htmlPrepend, fs.readFileSync(htdocs.getHtmlFile('index.html')), htmlAppend);
+  var indexJs = concat(jsPrepend, fs.readFileSync(htdocs.getJsFile('index.js')), jsAppend);
   var jsETag = shasum(indexJs);
   var gzipIndexJs = zlib.gzipSync(indexJs);
   app.use('/js/index.js', function(req, res) {
@@ -483,6 +515,37 @@ if (!config.debugMode) {
   };
   app.get('/', sendIndex);
   app.get('/index.html', sendIndex);
+} else {
+  if (htmlPrepend || htmlAppend) {
+    var htmlFile = htdocs.getHtmlFile('index.html');
+    var injectHtml = function(req, res) {
+      fs.readFile(htmlFile, function(err, ctn) {
+        if (err) {
+          return sendError(res, err);
+        }
+        res.writeHead(200, {
+          'Content-Type': 'text/html; charset=utf-8'
+        });
+        res.end(concat(htmlPrepend, ctn, htmlAppend));
+      });
+    };
+    app.get('/', injectHtml);
+    app.get('/index.html', injectHtml);
+  }
+  if (jsPrepend || jsAppend) {
+    var jsFile = htdocs.getHtmlFile('js/index.js');
+    app.get('/js/index.js', function(req, res) {
+      fs.readFile(jsFile, function(err, ctn) {
+        if (err) {
+          return sendError(res, err);
+        }
+        res.writeHead(200, {
+          'Content-Type': 'application/javascript; charset=utf-8'
+        });
+        res.end(concat(jsPrepend, ctn, jsAppend));
+      });
+    });
+  }
 }
 
 app.get('/', function(req, res) {
