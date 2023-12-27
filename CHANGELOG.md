@@ -1,3 +1,10 @@
+# v2.9.61
+1. fix: 在新版本 Node 可能存在 [pipe](https://wproxy.org/whistle/rules/pipe.html) 功能失效问题
+2. fix: https://github.com/avwo/whistle/issues/1017
+
+# v2.9.60
+1. fix: https://github.com/avwo/whistle/issues/1012
+
 # v2.9.59
 1. feat: 支持 https://github.com/avwo/whistle/issues/978
 2. feat: 客户端支持直接使用 WebView 预览抓包内容
