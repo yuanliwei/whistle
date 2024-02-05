@@ -84,6 +84,12 @@ function notEStr(str) {
 
 exports.notEStr = notEStr;
 
+function isBool(b) {
+  return typeof b === 'boolean';
+}
+
+exports.isBool = isBool;
+
 exports.parseLogs = function (str) {
   try {
     str = JSON.parse(str);
@@ -114,6 +120,13 @@ exports.parseLogs = function (str) {
     }
   }
   return result;
+};
+
+exports.copyText = function(text, tips) {
+  var btn = $('#copyTextBtn');
+  btn.attr('data-clipboard-text', text);
+  btn.removeClass().addClass('w-copy-text' + (tips ? '-with-tips' : ''));
+  btn.trigger('click');
 };
 
 exports.preventDefault = function preventDefault(e) {
@@ -983,15 +996,28 @@ function getMockData(data) {
   };
 }
 
-function handleMockData(data) {
+exports.pluginIsDisabled = function(props, name) {
+  var disabledPlugins = props.disabledPlugins || {};
+  return !props.ndp && (props.disabledAllPlugins || disabledPlugins[name]);
+};
+
+exports.handleImportData = function(data) {
+  if (data) {
+    if (data.type === 'setNetworkSettings') {
+      events.trigger('setNetworkSettings', data);
+      return true;
+    }
+    if (data.type === 'setComposerData') {
+      events.trigger('setComposerData', data);
+      return true;
+    }
+  }
   var mockData = getMockData(data);
   if (mockData) {
     events.trigger('showRulesDialog', mockData);
   }
   return mockData;
-}
-
-exports.handleMockData = handleMockData;
+};
 
 var rentity = /['<> "&]/g;
 var entities = {
@@ -2209,6 +2235,9 @@ function parseResCookie(cookie) {
       break;
     case 'secure':
       result.secure = true;
+      break;
+    case 'partitioned':
+      result.partitioned = true;
       break;
     case 'samesite':
       result.sameSite = cookie[i];

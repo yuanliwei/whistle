@@ -50,7 +50,6 @@
   border: 1px solid #ccc;
   border-left: none;
   border-right: none;
-  background-color: #f6f6f6;
 }
 .w-composer-history-btn {
   height: 24px;
@@ -190,13 +189,21 @@
   position: relative;
 }
 
-.w-composer-bar .btn {
+.w-composer-bar .btn, .w-copy-as-curl {
   line-height: 13px;
   height: 15px;
   padding: 0 5px;
   font-weight: normal;
   font-size: 12px;
   border-radius: 3px;
+}
+
+.w-copy-as-curl {
+  margin-left: 15px;
+  margin-top: -3px;
+}
+
+.w-composer-bar .btn {
   position: absolute;
   top: 1px;
   right: 5px;
@@ -280,7 +287,7 @@ textarea.w-composer-rules {
 .w-composer-body textarea:read-only,
 .w-detail-composer input:read-only,
 .w-detail-composer textarea:disabled {
-  background: #fefefe !important;
+  background: #eee !important;
   color: #999 !important;
 }
 
@@ -394,10 +401,6 @@ textarea.w-composer-rules {
   background-color: lightyellow;
 }
 
-.w-composer-use-h2, .w-composer-enable-body {
-  position: absolute;
-  top: 0;
-}
 .w-composer-use-h2 {
   right: 5px;
 }
@@ -425,13 +428,10 @@ textarea.w-composer-rules {
   font-size: 13px;
 }
 
-.w-composer-pretty {
-  right: 146px;
-  position: absolute;
-}
-
-.w-composer-enable-body {
-  right: 80px;
+.w-composer-proxy-rules, .w-composer-pretty,
+.w-composer-use-h2, .w-composer-enable-body {
+  margin-left: 15px!important;
+  font-weight: normal;
 }
 
 .w-composer-tabs input {
@@ -500,7 +500,6 @@ textarea.w-composer-rules {
   background: #eee;
   padding: 8px 5px;
   overflow: hidden;
-  text-overflow: ellipsis;
   position: sticky;
   top: 0;
   font-weight: 600;
@@ -512,9 +511,8 @@ textarea.w-composer-rules {
 }
 
 .w-history-item {
-  padding: 6px 5px 8px 15px;
+  padding: 6px 5px 8px 10px;
   overflow: hidden;
-  text-overflow: ellipsis;
   cursor: default;
   white-space: nowrap;
   background-color: #fff;
@@ -541,7 +539,9 @@ textarea.w-composer-rules {
   margin-right: 0;
 }
 
-.w-history-item:hover,
+.w-history-item:hover {
+  background: rgba(0,0,0,.03);
+}
 .w-history-item.w-selected {
   background: rgba(0,0,0,.1);
 }
@@ -571,7 +571,7 @@ textarea.w-composer-rules {
 .w-composer-history-data .w-close {
   position: absolute;
   right: 10px;
-  top: 5px;
+  top: 0;
   cursor: pointer;
   z-index: 1;
   font-size: 20px;
@@ -601,13 +601,35 @@ textarea.w-composer-rules {
   white-space: nowrap;
   overflow: hidden;
   border-bottom: 1px solid #ddd;
-  padding: 5px 0 7px;
+  padding: 0 0 2px;
   position: relative;
 }
 
 .w-composer-history-footer .btn {
-  height: 26px;
-  line-height: 24px;
-  padding: 0 8px;
+  height: 24px;
+  line-height: 22px;
+  padding: 0 6px;
   margin-left: 10px;
+  font-size: 13px;
+}
+
+.w-composer-btns {
+  position: absolute;
+  top: 0;
+  right: 0;
+}
+
+.w-composer-btns a {
+  color: #000;
+  font-weight: normal;
+  margin-right: 10px;
+  text-decoration: none;
+}
+
+.w-composer-btns a:last-child {
+  margin-right: 5px;
+}
+
+.w-composer-btns a:hover {
+  color: #337ab7;
 }

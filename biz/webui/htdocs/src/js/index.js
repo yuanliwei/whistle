@@ -33,6 +33,7 @@ var AccountDialog = require('./account-dialog');
 var JSONDialog = require('./json-dialog');
 var Account = require('./account');
 var MockDialog = require('./mock-dialog');
+var IframeDialog = require('./iframe-dialog');
 var win = require('./win');
 var Divider = require('./divider');
 var {load} = require('./components/editor/MonacoLoader.js');
@@ -246,7 +247,7 @@ function readFileJson(file, cb) {
 
 function handleImportData(file, cb, name) {
   readFileJson(file, function(data) {
-    if (!data || util.handleMockData(data)) {
+    if (!data || util.handleImportData(data)) {
       return cb();
     }
     cb(data);
@@ -840,6 +841,59 @@ var Index = React.createClass({
         self.refs.rulesDialog.show(data.rules, data.values);
       }
     });
+
+    var composerDidMount;
+    var composerData;
+
+    events.one('composerDidMount', function() {
+      composerDidMount = true;
+      if (composerData) {
+        events.trigger('_setComposerData', composerData);
+        composerData = null;
+      }
+    });
+
+    events.on('setComposerData', function(_, data) {
+      if (!data || self.state.rulesMode) {
+        return;
+      }
+      if (self.state.name !== 'network') {
+        self.showNetwork();
+      }
+      events.trigger('showComposerTab');
+      if (composerDidMount) {
+        events.trigger('_setComposerData', data);
+      } else {
+        composerData = data;
+      }
+    });
+   
+    events.on('showPluginOption', function(_, plugin) {
+      if (!plugin) {
+        return;
+      }
+      var name = plugin.moduleName.substring(plugin.moduleName.lastIndexOf('.') + 1);
+      var url =  plugin.pluginHomepage || 'plugin.' + name + '/';
+      if ((plugin.pluginHomepage || plugin.openExternal) && !plugin.openInPlugins && !plugin.openInModal) {
+        return window.open(url);
+      }
+      var modal = plugin.openInModal || '';
+      if (modal && !plugin.pluginHomepage) {
+        url += '?openInModal=5b6af7b9884e1165';
+      }
+      self.refs.iframeDialog.show({
+        name: name,
+        url: url,
+        homepage: plugin.homepage,
+        disabled: util.pluginIsDisabled(self.state, name),
+        width: modal.width,
+        height: modal.height
+      });
+    });
+    events.on('hidePluginOption', function() {
+      self.refs.iframeDialog.hide();
+    });
+  
     events.on('download', function(_, data) {
       self.download(data);
     });
@@ -1250,7 +1304,7 @@ var Index = React.createClass({
     });
 
     if (self.state.name == 'network') {
-      self.startLoadData();
+      self.startLoadData(true);
     }
     dataCenter.on('settings', function (data) {
       var state = self.state;
@@ -1566,7 +1620,7 @@ var Index = React.createClass({
     return true;
   },
   importAnySessions: function (data) {
-    if (data && !util.handleMockData(data)) {
+    if (data && !util.handleImportData(data)) {
       if (Array.isArray(data)) {
         dataCenter.addNetworkList(data);
       } else {
@@ -1688,10 +1742,14 @@ var Index = React.createClass({
   preventBlur: function (e) {
     e.target.nodeName != 'INPUT' && e.preventDefault();
   },
-  startLoadData: function () {
+  startLoadData: function (init) {
     var self = this;
     if (self._updateNetwork) {
-      self._updateNetwork();
+      if (init) {
+        self._updateNetwork();
+      } else {
+        setTimeout(self._updateNetwork, 30);
+      }
       return;
     }
     var scrollTimeout;
@@ -1755,15 +1813,22 @@ var Index = React.createClass({
     self.autoRefresh = scrollToBottom;
     self.scrollerAtBottom = atBottom;
 
-    function atBottom() {
-      var body = baseDom.find(
-        '.ReactVirtualized__Grid__innerScrollContainer'
-      )[0];
+    function atBottom(force) {
+      var body = baseDom.find('.ReactVirtualized__Grid__innerScrollContainer')[0];
       if (!body) {
+        if (force) {
+          events.trigger('toggleBackToBottomBtn', false);
+        }
         return true;
       }
-      return con.scrollTop + con.offsetHeight + 5 > body.offsetHeight;
+      var height = con.offsetHeight + 5;
+      var ctnHeight = body.offsetHeight;
+      var isBottom = con.scrollTop + height > ctnHeight;
+      events.trigger('toggleBackToBottomBtn', !isBottom && ctnHeight >= height);
+      return isBottom;
     }
+
+    events.on('checkAtBottom', atBottom);
   },
   showPlugins: function (e) {
     if (this.state.name != 'plugins') {
@@ -1969,7 +2034,7 @@ var Index = React.createClass({
           return;
         }
         self.refs.importRemoteRules.hide();
-        if (data && !util.handleMockData(data)) {
+        if (data && !util.handleImportData(data)) {
           self.handleImportRules(data);
         }
       })
@@ -2008,7 +2073,7 @@ var Index = React.createClass({
           return;
         }
         self.refs.importRemoteValues.hide();
-        if (data && !util.handleMockData(data)) {
+        if (data && !util.handleImportData(data)) {
           self.handleImportValues(data);
         }
       })
@@ -2428,9 +2493,10 @@ var Index = React.createClass({
   hideRenameValueInput: function () {
     this.setState({ showEditValues: false });
   },
-  showCreateRules: function (_, item) {
+  showCreateRules: function (_, group, focusItem) {
     var createRulesInput = ReactDOM.findDOMNode(this.refs.createRulesInput);
-    this._curFocusRulesItem = item;
+    this._curFocusRulesGroup = group;
+    this._curFocusRulesItem = focusItem;
     this.setState(
       {
         showCreateRules: true
@@ -2440,9 +2506,10 @@ var Index = React.createClass({
       }
     );
   },
-  showCreateValues: function (_, item) {
+  showCreateValues: function (_, group, focusItem) {
     var createValuesInput = ReactDOM.findDOMNode(this.refs.createValuesInput);
-    this._curFocusValuesItem = item;
+    this._curFocusValuesGroup = group;
+    this._curFocusValuesItem = focusItem;
     this.setState(
       {
         showCreateValues: true
@@ -2518,23 +2585,41 @@ var Index = React.createClass({
       return;
     }
     var addToTop = type === 'top' ? 1 : '';
-    var curItem = self._curFocusRulesItem;
+    var groupItem = self._curFocusRulesGroup;
+    var focusItem = self._curFocusRulesItem;
     var params = { name: name, addToTop: addToTop };
-    if (curItem) {
-      params.groupName = curItem.name;
+    if (isGroup) {
+      var focusName = focusItem && focusItem.name;
+      if (focusName) {
+        if (focusName === 'Default') {
+          focusName = self.state.rules.list[1];
+        }
+        params.focusName = focusName;
+      }
+    } else if (groupItem) {
+      params.groupName = groupItem.name;
     }
     dataCenter.rules.add(params, function (data, xhr) {
       if (data && data.ec === 0) {
         var item = modal[addToTop ? 'unshift' : 'add'](name);
         target.value = '';
         target.blur();
-        modal.moveToGroup(name, params.groupName, addToTop);
-        !isGroup && self.setRulesActive(name);
+        var toName = params.focusName;
+        if (toName) {
+          modal.moveTo(name, toName);
+        } else {
+          modal.moveToGroup(name, params.groupName, addToTop);
+        }
+        if (isGroup) {
+          if (item) {
+            item._isNewGroup = true;
+          }
+        } else {
+          self.setRulesActive(name);
+        }
         params.groupName && events.trigger('expandRulesGroup', params.groupName);
         self.setState(isGroup ? {} : {
           activeRules: item
-        }, function() {
-          isGroup && events.trigger('scrollRulesBottom');
         });
         self.triggerRulesChange('create');
       } else {
@@ -2576,23 +2661,37 @@ var Index = React.createClass({
       message.error('The name \'' + name + '\' already exists.');
       return;
     }
-    var curItem = self._curFocusValuesItem;
+    var groupItem = self._curFocusValuesGroup;
+    var focusItem = self._curFocusValuesItem;
     var params = { name: name };
-    if (curItem) {
-      params.groupName = curItem.name;
+    if (isGroup) {
+      if (focusItem) {
+        params.focusName = focusItem.name;
+      }
+    } else if (groupItem) {
+      params.groupName = groupItem.name;
     }
     dataCenter.values.add(params, function (data, xhr) {
       if (data && data.ec === 0) {
         var item = modal.add(name);
         target.value = '';
         target.blur();
-        modal.moveToGroup(name, params.groupName);
-        !isGroup && self.setValuesActive(name);
+        var toName = params.focusName;
+        if (toName) {
+          modal.moveTo(name, toName);
+        } else {
+          modal.moveToGroup(name, params.groupName);
+        }
+        if (isGroup) {
+          if (item) {
+            item._isNewGroup = true;
+          }
+        } else {
+          self.setValuesActive(name);
+        }
         params.groupName && events.trigger('expandValuesGroup', params.groupName);
         self.setState(isGroup ? {} : {
           activeValues: item
-        }, function() {
-          isGroup && events.trigger('scrollValuesBottom');
         });
         self.triggerValuesChange('create');
       } else {
@@ -3435,7 +3534,7 @@ var Index = React.createClass({
             self.importHarSessions(result);
           }
         } catch (e) {
-          win.alert('Unrecognized format.');
+          win.alert('Format error.');
         }
       });
       return;
@@ -4628,7 +4727,7 @@ var Index = React.createClass({
             </div>
           </div>
         </div>
-        <NetworkSettings ref="networkSettings" />
+        {rulesMode ? null : <NetworkSettings ref="networkSettings" />}
         <div ref="rootCADialog" className="modal fade w-https-dialog">
           <div className="modal-dialog">
             <div className="modal-content">
@@ -5102,6 +5201,7 @@ var Index = React.createClass({
           <input ref="filename" name="filename" type="hidden" />
           <input ref="content" name="content" type="hidden" />
         </form>
+        <IframeDialog ref="iframeDialog" />
       </div>
     );
   }

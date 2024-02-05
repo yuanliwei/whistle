@@ -161,6 +161,7 @@ var Composer = React.createClass({
       repeatTimes: 1,
       historyData: [],
       disableBody: !!storage.get('disableComposerBody'),
+      enableProxyRules: storage.get('composerProxyRules') !== '',
       url: data.url,
       method: METHODS.indexOf(method) === -1 ? 'GET' : method,
       headers: getString(data.headers, MAX_HEADERS_SIZE),
@@ -180,6 +181,16 @@ var Composer = React.createClass({
     self.update(self.props.modal);
     this.refs.uploadBody.update(this.uploadBodyData);
     this.hintElem = $(ReactDOM.findDOMNode(this.refs.hints));
+    events.on('_setComposerData', function(_, data) {
+      if (!data) {
+        return;
+      }
+      win.confirm('Are you sure to modify the composer?', function(sure) {
+        if (sure) {
+          self.onCompose(data);
+        }
+      });
+    });
     events.on('setComposer', function () {
       if (self.state.pending || self.props.disabled) {
         return;
@@ -240,10 +251,12 @@ var Composer = React.createClass({
       }
       if (!(target.closest('.w-composer-history-data').length ||
         target.closest('.w-replay-count-dialog').length ||
-        target.closest('.w-composer-history-btn').length)) {
+        target.closest('.w-composer-history-btn').length ||
+        target.closest('.w-copy-text-with-tips').length)) {
         self.hideHistory();
       }
     });
+    events.trigger('composerDidMount');
   },
   repeatTimesChange: function (e) {
     var count = e.target.value.replace(/^\s*0*|[^\d]+/, '');
@@ -353,25 +366,29 @@ var Composer = React.createClass({
     var hide = util.getBoolean(this.props.hide);
     return hide != util.getBoolean(nextProps.hide) || !hide;
   },
-  saveComposer: function () {
+  getComposerData: function() {
     var refs = this.refs;
     var method = this.getMethod();
     var url = ReactDOM.findDOMNode(this.refs.url).value.trim();
     var headers = ReactDOM.findDOMNode(this.refs.headers).value;
-    this.state.url = url;
-    this.state.headers = headers;
-    var params = {
+
+    return {
       url: url,
       headers: headers,
       method: method,
       useH2: this.state.useH2 ? 1 : '',
       body: ReactDOM.findDOMNode(refs.body).value.replace(/\r\n|\r|\n/g, '\r\n')
     };
-    storage.set('composerData', JSON.stringify(params));
-    if (this.hasBody != hasReqBody(method, url, headers)) {
+  },
+  saveComposer: function () {
+    var data = this.getComposerData();
+    this.state.url = data.url;
+    this.state.headers = data.headers;
+    storage.set('composerData', JSON.stringify(data));
+    if (this.hasBody != hasReqBody(data.method, data.url, data.headers)) {
       this.setState({});
     }
-    return params;
+    return data;
   },
   addHistory: function (params) {
     var self = this;
@@ -484,11 +501,16 @@ var Composer = React.createClass({
     if (!item) {
       return;
     }
+    this.state.tabName = 'Request';
+    this.result = null;
     var refs = this.refs;
     var isHexText = !!item.isHexText;
     var headers = item.headers;
-    if (headers && typeof headers === 'string') {
-      var rules = [];
+    var rules = [];
+    if (util.notEStr(item.rules)) {
+      rules.push(item.rules);
+    }
+    if (util.notEStr(headers)) {
       headers = headers.trim().split(/[\r\n]+/).filter(function(line) {
         line = line.trim();
         var index = line.indexOf(':');
@@ -504,29 +526,53 @@ var Composer = React.createClass({
         }
         return true;
       }).join('\r\n');
-      if (rules.length) {
-        this.updateRules(rules.join('\n'));
-      }
     }
-    ReactDOM.findDOMNode(refs.url).value = item.url;
-    ReactDOM.findDOMNode(refs.method).value = item.method;
-    ReactDOM.findDOMNode(refs.headers).value = headers;
-    var body = isHexText
+    if (rules.length) {
+      this.updateRules(rules.join('\n'));
+    }
+    if (util.isString(item.url)) {
+      ReactDOM.findDOMNode(refs.url).value = item.url;
+      this.state.url = item.url;
+    }
+    if (util.isString(item.method)) {
+      ReactDOM.findDOMNode(refs.method).value = item.method;
+      this.state.method = item.method;
+    }
+    if (util.isString(headers)) {
+      ReactDOM.findDOMNode(refs.headers).value = headers;
+      this.state.headers = headers;
+    }
+    if (!isHexText && !item.body && item.base64) {
+      isHexText = true;
+    }
+    var body = isHexText && item.base64
       ? util.getHexText(util.getHexFromBase64(item.base64))
       : item.body || '';
     ReactDOM.findDOMNode(refs.body).value = body;
     this.state.tabName = 'Request';
     this.state.result = '';
     this.state.isHexText = isHexText;
-    this.state.url = item.url;
     this.state.useH2 = item.useH2;
-    this.state.headers = item.headers;
-    this.state.method = item.method;
-    if (body) {
+    if (item.disableBody != null) {
+      this.state.disableBody = !!item.disableBody;
+    } else if (body) {
       this.state.disableBody = false;
     }
+    if (item.isCRLF != null) {
+      this.state.isCRLF = !!item.isCRLF;
+      storage.set('useCRLBody', item.isCRLF ? 1 : '');
+    }
+    if (item.disableComposerRules != null) {
+      this.setRulesDisable(item.disableComposerRules);
+    }
+    if (item.enableProxyRules != null) {
+      this.state.enableProxyRules = !!item.enableProxyRules;
+      storage.set('composerProxyRules', item.enableProxyRules ? 1 : '');
+    }
     this.onComposerChange(true);
+    storage.set('disableComposerBody', this.state.disableBody ? 1 : '');
     storage.set('useH2InComposer', item.useH2 ? 1 : '');
+    storage.set('showHexTextBody', isHexText ? 1 : '');
   },
   onReplay: function (times) {
     if (this._selectedItem) {
@@ -637,6 +683,11 @@ var Composer = React.createClass({
       }
     });
     storage.set('composerUploadBody', JSON.stringify(result));
+  },
+  onProxyRules: function (e) {
+    var enable = e.target.checked;
+    storage.set('composerProxyRules', enable ? 1 : '');
+    this.setState({ enableProxyRules: enable });
   },
   onShowPretty: function (e) {
     var show = e.target.checked;
@@ -842,7 +893,8 @@ var Composer = React.createClass({
       body: body,
       base64: base64,
       repeatCount: times,
-      isHexText: isHexText
+      isHexText: isHexText,
+      enableProxyRules: this.state.enableProxyRules
     });
   },
   sendRequest: function(params) {
@@ -1150,6 +1202,43 @@ var Composer = React.createClass({
       return this.toggleHistory();
     }
   },
+  import: function(e) {
+    events.trigger('importSessions', e);
+  },
+  copyAsCURL: function() {
+    var state = this.state;
+    var body = ReactDOM.findDOMNode(this.refs.body).value;
+    var base64 = '';
+    if (state.isHexText) {
+      base64 = util.getBase64FromHexText(body) || '';
+      body = '';
+    }
+    var text = util.asCURL({
+      url: state.url || '',
+      req: {
+        method: state.method,
+        headers: util.parseHeaders(state.headers),
+        base64: base64,
+        body: body
+      }
+    });
+    util.copyText(text, true);
+  },
+  export: function() {
+    var data = this.getComposerData();
+    var state = this.state;
+    data.disableBody = state.disableBody;
+    data.rules = state.rules;
+    data.disableComposerRules = state.disableComposerRules;
+    data.isHexText = state.isHexText;
+    data.isCRLF = state.isCRLF;
+    data.type = 'setComposerData';
+    data.enableProxyRules = state.enableProxyRules;
+    events.trigger('download', {
+      name: 'composer_' + Date.now() + '.txt',
+      value: JSON.stringify(data, null, '  ')
+    });
+  },
   onBodyStateChange: function (e) {
     var disableBody = !e.target.checked;
     this.setState({ disableBody: disableBody });
@@ -1190,6 +1279,7 @@ var Composer = React.createClass({
     var showHistory = state.showHistory;
     var urlHints = state.urlHints;
     var hasQuery = state.hasQuery;
+    var enableProxyRules = state.enableProxyRules;
     self.hasBody = hasBody;
 
     return (
@@ -1305,6 +1395,15 @@ var Composer = React.createClass({
                   />
                   Rules
                 </label>
+                <label className="w-composer-proxy-rules" title="Rules set in Whistle">
+                  <input
+                    disabled={pending}
+                    type="checkbox"
+                    onChange={this.onProxyRules}
+                    checked={enableProxyRules}
+                  />
+                  ProxyRules
+                </label>
                 <label className="w-composer-pretty">
                   <input
                     onChange={this.onShowPretty}
@@ -1329,8 +1428,13 @@ var Composer = React.createClass({
                     onChange={this.toggleH2}
                     checked={dataCenter.supportH2 && useH2}
                   />
-                  Use H2
+                  HTTP/2
                 </label>
+                <div className="w-composer-btns">
+                  <a draggable="false" onClick={self.import}>Import</a>
+                  <a draggable="false" onClick={self.export}>Export</a>
+                  <a draggable="false" onClick={self.copyAsCURL}>CopyAsCURL</a>
+                </div>
               </div>
               <textarea
                 disabled={disableComposerRules || pending}
@@ -1343,7 +1447,7 @@ var Composer = React.createClass({
                 }}
                 maxLength="8192"
                 className="fill orient-vertical-box w-composer-rules"
-                placeholder="Input the rules"
+                placeholder={'Input the rules' + (enableProxyRules ? ' (ProxyRules has higher priority)' : '')}
               />
             </div>
             <div className="orient-vertical-box fill">

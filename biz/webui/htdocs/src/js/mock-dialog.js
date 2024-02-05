@@ -5,7 +5,7 @@ var Dialog = require('./dialog');
 var CopyBtn = require('./copy-btn');
 var util = require('./util');
 var dataCenter = require('./data-center');
-var getAllRules = require('./protocols').getAllRules;
+var getSortedRules = require('./protocols').getSortedRules;
 var win = require('./win');
 var message = require('./message');
 var events = require('./events');
@@ -18,7 +18,7 @@ var iframeStyle = {
   padding: 0,
   border: 'none',
   width: 840,
-  height: 320,
+  height: 360,
   margin: 0,
   verticalAlign: 'top'
 };
@@ -101,7 +101,8 @@ var MockDialog = React.createClass({
       dataSrc: 'resBody',
       valueType: 'file',
       protocol: 'file://',
-      inlineValue: ''
+      inlineValue: '',
+      comment: ''
     };
   },
   show: function (item, dataSrc) {
@@ -155,8 +156,7 @@ var MockDialog = React.createClass({
   getValues: function() {
     var valueType = this.getValueType();
     var isFile = valueType === 'file';
-    var showKeyValue = isFile || valueType === 'key';
-    if (!showKeyValue) {
+    if (!isFile && valueType !== 'key') {
       return;
     }
     var values = {
@@ -166,7 +166,7 @@ var MockDialog = React.createClass({
     var value = this._textarea.value;
     var dataSrc = this.state.dataSrc;
     var item = this.state.item;
-    if (value === getValue(item, dataSrc)) {
+    if (isFile && value === getValue(item, dataSrc)) {
       if (dataSrc === 'reqBody') {
         values.base64 = item.req.base64;
       } else if (dataSrc === 'resBody') {
@@ -179,8 +179,7 @@ var MockDialog = React.createClass({
     return values;
   },
   export: function() {
-    var rules = this.state.rules;
-    var data = [rules];
+    var data = [this.wrapComment()];
     var values = this.getValues();
     if (values) {
       data.push(values);
@@ -282,6 +281,11 @@ var MockDialog = React.createClass({
     events.on('hideMockDialog', function() {
       self.refs.mockDialog.hide();
     });
+    events.on('addMockRulesSuccess', function() {
+      if (self.getValueType() === 'file') {
+        self.state.comment = '';
+      }
+    });
     $(document).on('click mousedown', function(e) {
       var target = $(e.target);
       if (!(target.closest('.w-composer-params').length ||
@@ -378,7 +382,7 @@ var MockDialog = React.createClass({
       }
       if (rules && force !== true) {
         return events.trigger('showRulesDialog', {
-          rules: rules,
+          rules: self.wrapComment(),
           values: self.getValues()
         });
       }
@@ -450,6 +454,18 @@ var MockDialog = React.createClass({
   valueNotChanged: function() {
     return this.isValuesKey() ? !this.state.hasChanged : this.getValueType() !== 'key';
   },
+  onComment: function(e) {
+    this.setState({ comment: e.target.value });
+  },
+  wrapComment: function() {
+    var state = this.state;
+    var rules = state.rules;
+    if (!rules || this.getValueType() !== 'file') {
+      return rules;
+    }
+    var comment = state.comment.trim();
+    return comment ? '# ' + comment + '\n' + rules : rules;
+  },
   render: function () {
     var state = this.state;
     var valueType = this.getValueType();
@@ -461,8 +477,9 @@ var MockDialog = React.createClass({
     var hasQuery = state.hasQuery;
     var dataSrc = state.dataSrc || '';
     var preStyle = rules ? null : HIDE_STYLE;
-    var protoList = getAllRules();
+    var protoList = getSortedRules();
     var valuesModal = dataCenter.getValuesModal();
+    rules = this.wrapComment();
 
     return (
       <Dialog ref="mockDialog" wstyle="w-mock-dialog">
@@ -519,6 +536,16 @@ var MockDialog = React.createClass({
                 })
               }
             </select>
+            <label className="w-mock-comment">
+              Comment:
+              <input
+                className="form-control"
+                placeholder="Input the comment of rules"
+                value={state.comment}
+                onChange={this.onComment}
+                maxLength={32}
+              />
+            </label>
             <textarea onChange={this.onInlineValueChange} className="w-mock-inline" placeholder="Input the rule value"
               style={{display: showKeyValue ? 'none' : null}} maxLength="1200" value={inlineValue} />
             <div style={{display: showKeyValue || !inlineValue ? 'none' : null}} className="w-mock-inline-action">

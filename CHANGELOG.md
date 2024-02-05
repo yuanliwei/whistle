@@ -1,3 +1,21 @@
+# v2.9.64
+1. feat: Mock 功能支持对临时文件添加注释
+2. feat: 优化 Rules & Values 的拖拽功能
+3. fix: https://github.com/avwo/whistle/issues/1040
+
+# v2.9.63
+1. feat: 支持 Cookie 的 `Partitioned` 属性（该属性需要跟 `Secure`、`SameSite=None` 一起使用）
+2. feat: Composer 添加 `CopyAsCURL` 按钮
+3. feat: Composer 添加 `ProxyRules` 选项，去选后可以禁用 Proxy (Whistle) 设置的所有规则（Proxy 里面的规则优先级高于 Composer Rules）
+
+# v2.9.62
+1. chore: 更新 CodeMirror 版本
+2. feat: Network Settings 支持导入导出
+3. feat: Rules & Values 支持通过 `b:keyword` 搜索内容
+4. feat: Composer 支持导入导出
+5. feat: 插件 Option 支持设置 `openInModal` 以对话框形式打开
+6. feat: Network 列表新增 `Back to the bottom` 按钮
+
 # v2.9.61
 1. fix: 在新版本 Node 可能存在 [pipe](https://wproxy.org/whistle/rules/pipe.html) 功能失效问题
 2. fix: https://github.com/avwo/whistle/issues/1017
