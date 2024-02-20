@@ -19,13 +19,13 @@ function parseDomain(domain) {
   return ILLEGAL_CHARS_RE.test(domain) ? null : domain;
 }
 
-module.exports = function(req, res) {
+module.exports = async function(req, res) {
   var domain = parseDomain(req.query.domain);
   if (!domain) {
     return res.status(400).end('Bad Request');
   }
   var isStr = typeof domain == 'string';
-  var cert = isStr ? ca.createCertificate(domain) : ca.createRootCA(domain);
+  var cert = isStr ? (await ca.createCertificate(domain)) : ca.createRootCA(domain);
   var zip = new Zip();
   domain = isStr ? domain : 'root';
   var dir = domain + '/' + domain;
