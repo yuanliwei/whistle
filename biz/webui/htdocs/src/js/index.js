@@ -60,6 +60,23 @@ var search = window.location.search;
 var isClient = util.getQuery().mode === 'client';
 var hideLeftMenu;
 var showTreeView;
+var dataUrl;
+
+function isUrl(url) {
+  return /^https?:\/\/[^/]/i.test(url);
+}
+
+window.setWhistleDataUrl = function(url) {
+  if (isUrl(url)) {
+    if (dataCenter.handleDataUrl) {
+      dataCenter.handleDataUrl(url);
+    } else {
+      dataUrl = url;
+    }
+    return true;
+  }
+  return false;
+};
 
 if (/[&#?]showTreeView=(0|false|1|true)(?:&|$|#)/.test(search)) {
   showTreeView = RegExp.$1 === '1' || RegExp.$1 === 'true';
@@ -70,6 +87,21 @@ if (/[&#?]hideLeft(?:Bar|Menu)=(0|false|1|true)(?:&|$|#)/.test(search)) {
 } else if (/[&#?]showLeft(?:Bar|Menu)=(0|false|1|true)(?:&|$|#)/.test(search)) {
   hideLeftMenu = RegExp.$1 === '0' || RegExp.$1 === 'false';
 }
+
+var TOP_BAR_MENUS = [
+  {
+    name: 'Scroll To Top',
+    action: 'top'
+  },
+  {
+    name: 'Scroll To Selected',
+    action: 'selected'
+  },
+  {
+    name: 'Scroll To Bottom',
+    action: 'bottom'
+  }
+];
 
 var LEFT_BAR_MENUS = [
   {
@@ -193,15 +225,16 @@ function checkUrl(url) {
     message.error('The url cannot be empty.');
     return;
   }
-  if (!/^https?:\/\/[^/]/i.test(url)) {
+  if (!isUrl(url)) {
     message.error('Please input the correct url.');
     return;
   }
   return url;
 }
 
-function getRemoteDataHandler(callback) {
-  return function (data, xhr) {
+function getRemoteData(url, callback) {
+  var opts = {  url: url };
+  dataCenter.importRemote(opts,  function (data, xhr) {
     if (!data) {
       util.showSystemError(xhr);
       return callback(true);
@@ -221,7 +254,7 @@ function getRemoteDataHandler(callback) {
       message.error(e.message);
     }
     callback(true);
-  };
+  });
 }
 
 function readFileJson(file, cb) {
@@ -331,6 +364,52 @@ function getValue(url) {
   }
 
   return false;
+}
+
+function appendList(list, _list) {
+  if (!_list.length) {
+    return;
+  }
+  for (var i = 0, len = list.length; i < len; i++) {
+    if (util.isGroup(list[i])) {
+      _list.unshift(i, 0);
+      list.splice.apply(list, _list);
+      return;
+    }
+  }
+  list.push.apply(list, _list);
+}
+
+function updateData(list, data, modal) {
+  var changedList = modal.getChangedList();
+  if (!changedList.length) {
+    return;
+  }
+  var hasChanged;
+  var _list = [];
+  var activeItem;
+  changedList.forEach(function(item) {
+    var name = item.name;
+    var curItem = data[name];
+    if (!curItem) {
+      data[name] = item;
+      _list.push(name);
+      if (item.active) {
+        activeItem = item;
+      }
+    } else if (curItem.value != item.value) {
+      hasChanged = true;
+      data[name] = item;
+    }
+  });
+  appendList(list, _list);
+  if (activeItem) {
+    list.forEach(function(name) {
+      data[name].active = false;
+    });
+    activeItem.active = true;
+  }
+  return hasChanged;
 }
 
 var Index = React.createClass({
@@ -705,7 +784,7 @@ var Index = React.createClass({
       });
     return pluginsOptions;
   },
-  reloadRules: function (data) {
+  reloadRules: function (data, quite) {
     var self = this;
     var selectedName = storage.get('activeRules', true) || data.current;
     var rulesList = [];
@@ -728,10 +807,12 @@ var Index = React.createClass({
         active: selectedName === item.name
       };
     });
+    var changed = quite && updateData(rulesList, rulesData, self.state.rules);
     self.state.rules.reset(rulesList, rulesData);
     self.setState({});
+    return changed;
   },
-  reloadValues: function (data) {
+  reloadValues: function (data, quite) {
     var self = this;
     var selectedName = storage.get('activeValues', true) || data.current;
     var valuesList = [];
@@ -744,24 +825,36 @@ var Index = React.createClass({
         active: selectedName === item.name
       };
     });
+    var changed = quite && updateData(valuesList, valuesData, self.state.values);
     self.state.values.reset(valuesList, valuesData);
     self.setState({});
+    return changed;
   },
-  reloadData: function () {
+  reloadDataQuite: function() {
+    this.reloadData(true);
+  },
+  reloadData: function (quite) {
     var self = this;
     var dialog = $('.w-reload-data-tips').closest('.w-confirm-reload-dialog');
     var name = dialog.find('.w-reload-data-tips').attr('data-name');
     var isRules = name === 'rules';
+    quite = quite === true;
     var handleResponse = function (data, xhr) {
       if (!data) {
-        util.showSystemError(xhr);
-        return;
+        !quite && util.showSystemError(xhr, true);
+        return setTimeout(function() {
+          events.trigger(isRules ? 'rulesChanged' : 'valuesChanged', true);
+        }, 2000);
       }
       if (isRules) {
-        self.reloadRules(data);
+        if (self.reloadRules(data, quite)) {
+          events.trigger('rulesChanged', true);
+        }
         self.triggerRulesChange('reload');
       } else {
-        self.reloadValues(data);
+        if (self.reloadValues(data, quite)) {
+          events.trigger('valuesChanged', true);
+        }
         self.triggerValuesChange('reload');
       }
     };
@@ -773,23 +866,25 @@ var Index = React.createClass({
       events.trigger('reloadValuesRecycleBin');
     }
   },
-  showReloadRules: function () {
-    if (this.state.name === 'rules' && this.rulesChanged) {
+  showReloadRules: function (force) {
+    if (this.rulesChanged && this.state.name === 'rules') {
       this.rulesChanged = false;
       var hasChanged = this.state.rules.hasChanged();
       this.showReloadDialog(
         'The rules has been modified.<br/>Do you want to reload it.',
-        hasChanged
+        hasChanged,
+        force
       );
     }
   },
-  showReloadValues: function () {
-    if (this.state.name === 'values' && this.valuesChanged) {
+  showReloadValues: function (force) {
+    if (this.valuesChanged && this.state.name === 'values') {
       this.valuesChanged = false;
       var hasChanged = this.state.values.hasChanged();
       this.showReloadDialog(
         'The values has been modified.<br/>Do you want to reload it.',
-        hasChanged
+        hasChanged,
+        force
       );
     }
   },
@@ -797,14 +892,21 @@ var Index = React.createClass({
     this.showReloadRules();
     this.showReloadValues();
   },
-  showReloadDialog: function (msg, existsUnsaved) {
-    var confirmReload = this.refs.confirmReload;
-    confirmReload.show();
+  showReloadDialog: function (msg, existsUnsaved, force) {
+    var dialog = this.refs.confirmReload;
+    clearTimeout(this.reloadTimer);
+    var tips = $('.w-reload-data-tips');
+    tips.attr('data-name', this.state.name);
+    if (!force && !dialog.isVisible()) {
+      this.reloadTimer = setTimeout(this.reloadDataQuite, 1000);
+      return;
+    }
+    dialog.show();
     if (existsUnsaved) {
       msg +=
         '<p class="w-confim-reload-note">Note: There are unsaved changes.</p>';
     }
-    $('.w-reload-data-tips').html(msg).attr('data-name', this.state.name);
+    tips.html(msg);
   },
   showTab: function() {
     var pageName = getPageName(this.state);
@@ -854,6 +956,14 @@ var Index = React.createClass({
       }
     });
 
+    events.on('showPluginOptionTab', function(_, plugin) {
+      plugin && self.showPluginTab(util.getSimplePluginName(plugin));
+    });
+
+    events.on('disablePlugin', function(_, plugin, disabled) {
+      self.setPluginState(util.getSimplePluginName(plugin), disabled);
+    });
+
     events.on('setComposerData', function(_, data) {
       if (!data || self.state.rulesMode) {
         return;
@@ -873,7 +983,7 @@ var Index = React.createClass({
       if (!plugin) {
         return;
       }
-      var name = plugin.moduleName.substring(plugin.moduleName.lastIndexOf('.') + 1);
+      var name = util.getSimplePluginName(plugin);
       var url =  plugin.pluginHomepage || 'plugin.' + name + '/';
       if ((plugin.pluginHomepage || plugin.openExternal) && !plugin.openInPlugins && !plugin.openInModal) {
         return window.open(url);
@@ -909,9 +1019,9 @@ var Index = React.createClass({
     events.on('showJsonViewDialog', function(_, data) {
       self.refs.jsonDialog.show(data);
     });
-    events.on('rulesChanged', function () {
+    events.on('rulesChanged', function (_, force) {
       self.rulesChanged = true;
-      self.showReloadRules();
+      self.showReloadRules(force === true);
     });
     events.on('switchTreeView', function () {
       self.toggleTreeView();
@@ -919,9 +1029,9 @@ var Index = React.createClass({
     events.on('updateGlobal', function () {
       self.setState({});
     });
-    events.on('valuesChanged', function () {
+    events.on('valuesChanged', function (_, force) {
       self.valuesChanged = true;
-      self.showReloadValues();
+      self.showReloadValues(force === true);
     });
     events.on('showNetwork', function () {
       self.showNetwork();
@@ -1125,6 +1235,9 @@ var Index = React.createClass({
           data = new FormData();
           data.append('importSessions', files[0]);
           self.uploadSessionsForm(data);
+          if (!/\.(txt|json)$/i.test(file && file.name)) {
+            return;
+          }
         }
         var overLeftBar = target.closest('.w-divider-left').length;
         var overPlugins = name === 'plugins';
@@ -1629,6 +1742,9 @@ var Index = React.createClass({
         });
       }
     } catch (e) {}
+    self.handleDataUrl(dataUrl || util.getDataUrl());
+    dataCenter.handleDataUrl = self.handleDataUrl;
+    dataUrl = null;
   },
   shouldComponentUpdate: function (_, nextSate) {
     var name = this.state.name;
@@ -1636,6 +1752,17 @@ var Index = React.createClass({
       this._isAtBottom = this.scrollerAtBottom && this.scrollerAtBottom();
     }
     return true;
+  },
+  handleDataUrl: function(url) {
+    if (!isUrl(url)) {
+      return;
+    }
+    var self = this;
+    getRemoteData(url, function(err, data) {
+      if (!err) {
+        self.importAnySessions(data);
+      }
+    });
   },
   importAnySessions: function (data) {
     if (data && !util.handleImportData(data)) {
@@ -1999,16 +2126,13 @@ var Index = React.createClass({
     }
     var self = this;
     self.setState({ pendingSessions: true });
-    dataCenter.importRemote(
-      { url: url },
-      getRemoteDataHandler(function (err, data) {
-        self.setState({ pendingSessions: false });
-        if (!err) {
-          byInput && self.refs.importRemoteSessions.hide();
-          self.importAnySessions(data);
-        }
-      })
-    );
+    getRemoteData(url, function (err, data) {
+      self.setState({ pendingSessions: false });
+      if (!err) {
+        byInput && self.refs.importRemoteSessions.hide();
+        self.importAnySessions(data);
+      }
+    });
   },
   importRemoteSessions: function (e) {
     if (e && e.type !== 'click' && e.keyCode !== 13) {
@@ -2044,19 +2168,16 @@ var Index = React.createClass({
       return;
     }
     self.setState({ pendingRules: true });
-    dataCenter.importRemote(
-      { url: url },
-      getRemoteDataHandler(function (err, data) {
-        self.setState({ pendingRules: false });
-        if (err) {
-          return;
-        }
-        self.refs.importRemoteRules.hide();
-        if (data && !util.handleImportData(data)) {
-          self.handleImportRules(data);
-        }
-      })
-    );
+    getRemoteData(url, function (err, data) {
+      self.setState({ pendingRules: false });
+      if (err) {
+        return;
+      }
+      self.refs.importRemoteRules.hide();
+      if (data && !util.handleImportData(data)) {
+        self.handleImportRules(data);
+      }
+    });
   },
   importValues: function (e, data) {
     var self = this;
@@ -2083,19 +2204,16 @@ var Index = React.createClass({
       return;
     }
     self.setState({ pendingValues: true });
-    dataCenter.importRemote(
-      { url: url },
-      getRemoteDataHandler(function (err, data) {
-        self.setState({ pendingValues: false });
-        if (err) {
-          return;
-        }
-        self.refs.importRemoteValues.hide();
-        if (data && !util.handleImportData(data)) {
-          self.handleImportValues(data);
-        }
-      })
-    );
+    getRemoteData(url, function (err, data) {
+      self.setState({ pendingValues: false });
+      if (err) {
+        return;
+      }
+      self.refs.importRemoteValues.hide();
+      if (data && !util.handleImportData(data)) {
+        self.handleImportValues(data);
+      }
+    });
   },
   _uploadRules: function (data, showResult) {
     var self = this;
@@ -2556,8 +2674,8 @@ var Index = React.createClass({
     );
   },
   enableHttp2: function (e) {
+    var self = this;
     if (!dataCenter.supportH2) {
-      var self = this;
       win.confirm(
         'The current version of Node.js cannot support HTTP/2.\nPlease upgrade to the latest LTS version.',
         function (sure) {
@@ -2875,6 +2993,9 @@ var Index = React.createClass({
           self.state.rules.setChanged(item.name, false);
           self.setState({});
           self.triggerRulesChange('save');
+          if (data.changed) {
+            events.trigger('rulesChanged');
+          }
           if (self.state.disabledAllRules) {
             win.confirm(
               'Rules has been turn off, do you want to turn on it?',
@@ -3323,20 +3444,20 @@ var Index = React.createClass({
     );
     e && e.preventDefault();
   },
-  disablePlugin: function (e) {
+  setPluginState: function(name, disabled) {
     var self = this;
-    var target = e.target;
     if (self.state.ndp) {
       return message.warn('Not allowed disable plugins.');
     }
     dataCenter.plugins.disablePlugin(
       {
-        name: $(target).attr('data-name'),
-        disabled: target.checked ? 0 : 1
+        name: name,
+        disabled: disabled ? 1 : 0
       },
       function (data, xhr) {
         if (data && data.ec === 0) {
           self.state.disabledPlugins = data.data;
+          dataCenter.setDisabledPlugins(data.data);
           protocols.setPlugins(self.state);
           self.setState({});
         } else {
@@ -3344,6 +3465,10 @@ var Index = React.createClass({
         }
       }
     );
+  },
+  disablePlugin: function (e) {
+    var target = e.target;
+    this.setPluginState($(target).attr('data-name'), !target.checked);
   },
   abort: function (list) {
     if (!Array.isArray(list)) {
@@ -3645,6 +3770,15 @@ var Index = React.createClass({
       self.refs.certsInfoDialog.show(data.certs, data.dir);
     });
   },
+  onTopContextMenu: function(e) {
+    if (this.getTabName() !== 'network') {
+      return;
+    }
+    e.preventDefault();
+    var data = util.getMenuPosition(e, 110, 100);
+    data.list = TOP_BAR_MENUS;
+    this.refs.topContextMenu.show(data);
+  },
   onContextMenu: function (e) {
     var count = 0;
     var list = LEFT_BAR_MENUS;
@@ -3681,6 +3815,23 @@ var Index = React.createClass({
     }
     e.preventDefault();
   },
+  onClickTopMenu: function(action) {
+    switch(action) {
+    case 'top':
+      if (this.container) {
+        this.container[0].scrollTop = 0;
+      }
+      break;
+    case 'selected':
+      events.trigger('ensureSelectedItemVisible');
+      break;
+    case 'bottom':
+      if (this.container) {
+        this.container[0].scrollTop = 10000000;
+      }
+      break;
+    }
+  },
   onClickContextMenu: function (action) {
     var self = this;
     var state = self.state;
@@ -3688,7 +3839,7 @@ var Index = React.createClass({
     switch (action) {
     case 'Tree View':
       list[2].checked = !state.network.isTreeView;
-      self.toggleTreeView();
+      setTimeout(self.toggleTreeView, 0);
       break;
     case 'Rules':
       self.disableAllRules(null, function (disabled) {
@@ -3944,7 +4095,7 @@ var Index = React.createClass({
           + (rulesOnlyMode || rulesMode ? ' w-show-rules-mode' : '')
         }
       >
-        <div className={'w-menu w-' + name + '-menu-list'}>
+        <div className={'w-menu w-' + name + '-menu-list'} onContextMenu={this.onTopContextMenu}>
           <a
             onClick={this.toggleLeftMenu}
             draggable="false"
@@ -4281,6 +4432,7 @@ var Index = React.createClass({
           <FilterBtn
             onClick={this.showSettings}
             disabledRules={isRules && disabledAllRules}
+            backRulesFirst={isRules && state.backRulesFirst}
             isNetwork={isNetwork}
             hide={isPlugins}
           />
@@ -4483,6 +4635,7 @@ var Index = React.createClass({
         </div>
         <div className="w-container box fill">
           <ContextMenu onClick={this.onClickContextMenu} ref="contextMenu" />
+          <ContextMenu onClick={this.onClickTopMenu} ref="topContextMenu" />
           <div
             onContextMenu={this.onContextMenu}
             onDoubleClick={this.onContextMenu}
@@ -4657,18 +4810,6 @@ var Index = React.createClass({
                   onFontSizeChange={this.onRulesFontSizeChange}
                   onLineNumberChange={this.onRulesLineNumberChange}
                 />
-                {!state.drb && (
-                  <p className="w-editor-settings-box">
-                    <label>
-                      <input
-                        type="checkbox"
-                        checked={state.backRulesFirst}
-                        onChange={this.enableBackRulesFirst}
-                      />{' '}
-                      Back rules first
-                    </label>
-                  </p>
-                )}
                 {!state.drm && (
                   <p className="w-editor-settings-box">
                     <label style={{ color: multiEnv ? '#aaa' : undefined }}>
@@ -4679,6 +4820,18 @@ var Index = React.createClass({
                         onChange={this.allowMultipleChoice}
                       />{' '}
                       Use multiple rules
+                    </label>
+                  </p>
+                )}
+                {!state.drb && (
+                  <p className="w-editor-settings-box">
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={state.backRulesFirst}
+                        onChange={this.enableBackRulesFirst}
+                      />{' '}
+                     The later rules first
                     </label>
                   </p>
                 )}
@@ -4807,8 +4960,11 @@ var Index = React.createClass({
                         checked={state.interceptHttpsConnects}
                         onChange={this.interceptHttpsConnects}
                         type="checkbox"
-                      />{' '}
-                      Capture TUNNEL CONNECTS
+                         className="w-va-mdl"
+                      />
+                      <span className="w-va-mdl w-mrl-5">
+                        Enable HTTPS (Capture Tunnel Connects)
+                      </span>
                     </label>
                   </p>
                   <p>
@@ -4817,8 +4973,11 @@ var Index = React.createClass({
                         checked={dataCenter.supportH2 && state.enableHttp2}
                         onChange={this.enableHttp2}
                         type="checkbox"
-                      />{' '}
+                        className="w-va-mdl"
+                      />
+                    <span className="w-va-mdl w-mrl-5">
                       Enable HTTP/2
+                    </span>
                     </label>
                   </p>
                   <a

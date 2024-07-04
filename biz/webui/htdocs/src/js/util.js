@@ -339,19 +339,18 @@ function getBoolean(val) {
 
 exports.getBoolean = getBoolean;
 
-exports.showSystemError = function (xhr) {
+exports.showSystemError = function (xhr, useToast) {
   xhr = xhr || {};
   var status = xhr.status;
+  var showTips = useToast ? message.error : win.alert;
   if (!status) {
-    return win.alert(
-      'Please check the proxy settings or whether whistle has been started.'
-    );
+    return showTips('Please check the proxy settings or whether whistle has been started.');
   }
   var msg = STATUS_CODES[status];
   if (msg) {
-    return win.alert('[' + status + '] ' + msg + '.');
+    return showTips('[' + status + '] ' + msg + '.');
   }
-  win.alert('[' + status + '] Unknown error, try again later.');
+  showTips('[' + status + '] Unknown error, try again later.');
 };
 
 exports.getClasses = function getClasses(obj) {
@@ -594,7 +593,7 @@ function getContentEncoding(headers) {
   var encoding = toLowerCase(
     (headers && headers['content-encoding']) || headers
   );
-  return encoding === 'gzip' || encoding === 'deflate' ? encoding : null;
+  return encoding === 'gzip' || encoding === 'br' || encoding === 'deflate' ? encoding : null;
 }
 
 exports.getOriginalReqHeaders = function (item, rulesHeaders) {
@@ -1084,6 +1083,7 @@ function socketIsClosed(reqData) {
     var lastItem = reqData.frames[reqData.frames.length - 1];
     if (lastItem && (lastItem.closed || lastItem.err)) {
       reqData.closed = true;
+      reqData.lastErr = lastItem.err;
     }
   }
   return reqData.closed;
@@ -1160,40 +1160,46 @@ exports.getTimeFromHar = function (time) {
 };
 
 exports.parseKeyword = function (keyword) {
-  keyword = keyword.toLowerCase().split(/\s+/g);
+  keyword = keyword.split(/\s+/);
   var result = {};
   var index = 0;
   for (var i = 0; i <= 3; i++) {
     var key = keyword[i];
     if (key && key.indexOf('level:') === 0) {
-      result.level = key.substring(6);
+      result.level = key.substring(6).toLowerCase();
     } else if (index < 3) {
       ++index;
-      result['key' + index] = key;
+      result['key' + index] = key && (toRegExp(key) || key.toLowerCase());
     }
   }
   return result;
 };
 
+function checkKey(raw, text, key) {
+  if (key.test) {
+    return !key.test(raw);
+  }
+  return text.indexOf(key) === -1;
+}
+
+exports.checkKey = checkKey;
+
 function checkLogText(text, keyword) {
   if (!keyword.key1) {
     return '';
   }
+  var raw = text;
   text = text.toLowerCase();
-  if (text.indexOf(keyword.key1) === -1) {
+  if (checkKey(raw, text, keyword.key1)) {
     return ' hide';
   }
-  if (keyword.key2 && text.indexOf(keyword.key2) === -1) {
+  if (keyword.key2 && checkKey(raw, text, keyword.key2)) {
     return ' hide';
   }
-  if (keyword.key3 && text.indexOf(keyword.key3) === -1) {
+  if (keyword.key3 && checkKey(raw, text, keyword.key3)) {
     return ' hide';
   }
   return '';
-}
-
-function showLog(item) {
-  item.hide = false;
 }
 
 exports.hasVisibleLog = function (list) {
@@ -1220,7 +1226,6 @@ exports.trimLogList = function (list, overflow, hasKeyword) {
         ++i;
       }
     }
-    overflow = list.length - 100;
   }
   overflow > 0 && list.splice(0, overflow);
   return list;
@@ -1245,13 +1250,29 @@ function toLocaleString(date) {
 
 exports.toLocaleString = toLocaleString;
 
-exports.filterLogList = function (list, keyword) {
+exports.filterLogList = function (list, keyword, init) {
   if (!list) {
-    return;
+    return list;
+  }
+  var map;
+  var result;
+  var addLog;
+  if (init) {
+    map = {};
+    result = [];
+    addLog = function(log) {
+      if (!map[log.id]) {
+        result.push(log);
+        map[log.id] = 1;
+      }
+    };
   }
   if (!keyword) {
-    list.forEach(showLog);
-    return;
+    list.forEach(function(item) {
+      item.hide = false;
+      addLog && addLog(item);
+    });
+    return result || list;
   }
   list.forEach(function (log) {
     var level = keyword.level;
@@ -1266,7 +1287,9 @@ exports.filterLogList = function (list, keyword) {
         log.text;
       log.hide = checkLogText(text, keyword);
     }
+    addLog && addLog(log);
   });
+  return result || list;
 };
 
 exports.checkLogText = checkLogText;
@@ -1288,13 +1311,14 @@ exports.triggerListChange = function (name, data) {
 };
 
 var REG_EXP = /^\/(.+)\/([miu]{0,3})$/;
-exports.toRegExp = function (regExp) {
+function toRegExp(regExp) {
   if (regExp && REG_EXP.test(regExp)) {
     try {
       return new RegExp(RegExp.$1, RegExp.$2);
     } catch (e) {}
   }
-};
+}
+exports.toRegExp = toRegExp;
 
 function getPadding(len) {
   return len > 0 ? new Array(len + 1).join('0') : '';
@@ -2590,3 +2614,48 @@ exports.replacQuery = function(url, query) {
   return url + query + hash;
 };
 
+function getDisplaySize(size) {
+  if (!(size > 1024)) {
+    return size;
+  }
+  return Number(size / 1024).toFixed(2) + 'k';
+}
+
+exports.getDisplaySize = function(size, unzipSize) {
+  unzipSize = size == unzipSize ? '' : getDisplaySize(unzipSize);
+  size = getDisplaySize(size);
+  return unzipSize ? size + ' / ' + unzipSize : size;
+};
+
+function formatSize(value) {
+  return value >= 1024
+    ? value + ' (' + Number(value / 1024).toFixed(2) + 'k)'
+    : value;
+}
+
+exports.formatSize = function(size, unzipSize) {
+  var value = formatSize(size);
+  if (size && unzipSize >= 0 && unzipSize != size) {
+    value += ' / ' + formatSize(unzipSize);
+    value += (unzipSize ? ' = ' + Number((size * 100) / unzipSize).toFixed(2) + '%' : '');
+  }
+  return value;
+};
+
+var IMPORT_URL_RE = /[?&#]data(?:_url|Url)=([^&#]+)(?:&|#|$)/;
+exports.getDataUrl = function() {
+  var result = IMPORT_URL_RE.exec(location.href);
+  return result && decodeURIComponentSafe(result[1]).trim();
+};
+
+exports.getSimplePluginName = function(plugin) {
+  var name = typeof plugin === 'string' ? plugin : plugin.moduleName;
+  return name.substring(name.lastIndexOf('.') + 1);
+};
+
+exports.showJSONDialog = function(data) {
+  var str = data && JSON.stringify(data);
+  if (str) {
+    events.trigger('showJsonViewDialog', str);
+  }
+};

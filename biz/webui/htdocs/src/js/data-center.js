@@ -30,7 +30,7 @@ var curLogId;
 var curSvrLogId;
 var dataIndex = 1000000;
 var MAX_PATH_LENGTH = 1024;
-var MAX_LOG_LENGTH = 256;
+var MAX_LOG_LENGTH = 360;
 var lastRowId;
 var endId;
 var hashFilterObj;
@@ -542,7 +542,8 @@ $.extend(
       createTempFile: {
         url: 'cgi-bin/sessions/create-temp-file',
         contentType: 'application/json'
-      }
+      },
+      setDnsOrder: 'cgi-bin/set-dns-order'
     },
     POST_CONF
   )
@@ -648,6 +649,7 @@ exports.getInitialData = function (callback) {
         if (data.lastDataId) {
           lastRowId = data.lastDataId;
         }
+        exports.pluginsRoot = data.pluginsRoot;
         exports.upload = createCgiObj(
           {
             importSessions: 'cgi-bin/sessions/import?clientId=' + pageId,
@@ -846,6 +848,7 @@ function startLoadData() {
       var server = data.server;
       port = server && server.port;
       account = server && server.account;
+      exports.pluginsRoot = data.pluginsRoot;
       updateCertStatus(data);
       exports.enablePluginMgr = data.epm;
       exports.supportH2 = data.supportH2;
@@ -1228,9 +1231,12 @@ function setReqData(item) {
   item.contentEncoding =
     (resHeaders['content-encoding'] || '') +
     (item.res.hasGzipError ? ' (Incorrect header)' : '');
-  var reqSize = req.size == null ? defaultValue : req.size;
+  var reqSize = req.size == null ? defaultValue : req.size; 
   var resSize = res.size == null ? defaultValue : res.size;
-  item.body = reqSize + ' + ' + resSize;
+  var reqSizeStr = util.getDisplaySize(reqSize, req.unzipSize);
+  var resSizeStr = util.getDisplaySize(resSize, res.unzipSize);
+  item.body =  reqSizeStr === '' && resSizeStr === '' ? '' : reqSizeStr  + ', ' + resSizeStr;
+  item.bodySize = (req.size || 0) + (res.size || 0);
   var result = res.statusCode == null ? defaultValue : res.statusCode;
   item.result = (/^[1-9]/.test(result) && parseInt(result, 10)) || result;
   item.type = (resHeaders['content-type'] || '')
@@ -1346,6 +1352,7 @@ exports.addNetworkList = function (list) {
       data.frames = data.frames.filter(function (frame) {
         if (frame) {
           delete frame.json;
+          delete frame.data;
         }
         return frame;
       });
@@ -1401,6 +1408,9 @@ function updateServerInfo(data) {
     return;
   }
   updateCount = 0;
+  if (exports.setServerInfo) {
+    exports.setServerInfo(data);
+  }
   if (curServerInfo && curServerInfo.strictMode != data.strictMode) {
     curServerInfo.strictMode = data.strictMode;
     events.trigger('updateStrictMode');
@@ -1517,6 +1527,10 @@ exports.getPlugin = function (name) {
   return pluginsMap[name];
 };
 
+exports.setDisabledPlugins = function(plugins) {
+  disabledPlugins = plugins;
+};
+
 function getMenus(menuName) {
   var list = account && account[menuName];
   if (!Array.isArray(list)) {
@@ -1536,7 +1550,7 @@ function getMenus(menuName) {
           menu.mtime = plugin.mtime;
           menu.priority = plugin.priority;
           menu._key = name;
-          menu._urlPattern = util.toRegExp(menu.urlPattern);
+          menu._urlPattern = util.toRegExp(menu.urlPattern) || util.toRegExp(menu.namePattern);
           list.push(menu);
         });
       }
@@ -1555,6 +1569,10 @@ exports.getRulesMenus = function () {
 
 exports.getValuesMenus = function () {
   return getMenus('valuesMenus');
+};
+
+exports.getPluginsMenus = function () {
+  return getMenus('pluginsMenus');
 };
 
 exports.getPluginColumns = function() {

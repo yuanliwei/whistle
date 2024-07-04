@@ -1,3 +1,51 @@
+# v2.9.76
+1. refactor: 删除所有 q 模块，解决安装告警问题
+
+# v2.9.75
+1. refactor: 优化 sse 请求的 `resReplace` 逻辑
+2. fix: 界面 `Enable HTTP/2` 报错问题
+3. feat: 新增 `locationHref://url` 和 `locationHref://js:url` 协议，相当于在 html 页面或 js 文件返回 `window.location.href = url`
+
+# v2.9.74
+1.fix: https://github.com/avwo/whistle/issues/1098
+
+# v2.9.73
+1. feat: 新增启动参数 `-M ipv4first|ipv6first` 用于设置 [dns.lookup的 options.order 参数](https://nodejs.org/docs/latest/api/dns.html#dnslookuphostname-options-callback)
+2. feat: `localhost` 的 dns.lookup 默认使用 `ipv4first`
+3. feat: Online 支持设置 `Verbatim`、`IPv4-first`、`IPv6-first`
+4. feat: 支持 `delete://query.xxx` 删除请求 url 里面的参数
+
+# v2.9.72
+1. fix: socks 代理无法获取 clientIp 及 IPv6 转发问题
+
+# v2.9.71
+1. feat: 自动更新 Rules & Values
+2. feat: Mock 对话框新增 Create 按钮
+
+
+# v2.9.70
+1. feat: 插件列表添加自定义右键菜单
+2. feat: 支持通过 `pattern jsAppend://[value|file|url] linePropslineProps://nomodule lineProps://module lineProps://defer lineProps://async lineProps://crossorigin`  设置标签属性
+
+# v2.9.69
+1. fix: https://github.com/avwo/whistle/issues/1064
+2. feat: 支持通过 `http://local.whistlejs.com/?dataUrl=encodeURIComponent(dataUrl)` 导入 `dataUrl` 返回的数据
+
+# v2.9.68
+1. feat: 新增 `enable://abortRes` 在响应阶段中断请求
+2. feat: 优化界面展示
+
+# v2.9.67
+1. feat: 新增 `enable://requestWithMatchedRules` 及 `enable://responseWithMatchedRules` 支持在请求头或响应头带上当前匹配的规则
+2. feat: 调整 Tools/Console 日志的缓存大小
+3. feat: Values 的编辑器添加快捷键 `Shift + Ctrl[Command] + F`、`Shift + Ctrl[Command] + I` 分别用来格式化和通过 JSONView 查看 JSON 数据
+4. feat: Whistle 默认会对 WebSocket 压缩包进行解压，有[用户反馈存在解压bug][https://github.com/avwo/whistle/issues/1048]，故新增 `wss://xxx disable://wsDecompress` 禁止解压数据包
+5. feat: WebSocket Frames 列表添加右键功能
+
+# v2.9.66
+1. feat: 支持通过正则表达式搜索日志
+2. feat: 支持通过 `disable://captureHttp disable://captureHttps`  关闭 http 或 https 的 TUNNEL 请求
+
 # v2.9.65
 1. feat: 支持 Rules 里面的 Values 和临时文件通过 Ctrl[Command] + 鼠标点击快速修改
 2. feat: 新增默认临时空白文件 `temp/blank`（支持自定义后缀 `temp/blank.xxx`）
@@ -943,7 +991,7 @@
 	}]}}
 	```
 	> 如果不希望进行自动转义，可以使用双引号 `"[xxx.yyy[n]]"`
-	2. feat: 添加在域名中 `.` 匹配模式
+	2. feat: 添加在域名中 `.` 匹配方式
 		``` txt
 		.test.com 表示匹配 x.test.com 与 test.com
 		*.test.com 表示匹配 x.test.com，不匹配 test.com

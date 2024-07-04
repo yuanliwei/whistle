@@ -1,14 +1,25 @@
-# reqSpeed
+# locationHref
 
-设置请求速度(单位：kb/s，千比特/每秒)，配置方式：
+浏览器重定向，相当于在页面执行脚本 `window.location.href = jumpUrl`，配置方式：
 
-	pattern reqSpeed://kbs
+	pattern locationHref://jumpUrl
 
-pattern参见[匹配方式](../pattern.html)，更多模式请参考[配置方式](../mode.html)。
+jumpUrl为请求要302跳转的目标url，pattern参见[匹配方式](../pattern.html)，更多模式请参考[配置方式](../mode.html)。
+
 
 例子：
 
-	www.ifeng.com reqSpeed://3
+	www.ifeng.com locationHref://http://www.aliexpress.com/
+
+不需要追加参数
+``` txt
+www.test.com/index.html locationHref://`https://ke.qq.com/test${query}`
+```
+
+需要追加参数
+``` txt
+www.test.com/index.html locationHref://`https://ke.qq.com/test${queryString}&test=1`
+```
 
 #### 过滤规则
 需要确保whistle是最新版本：[更新whistle](../update.html)

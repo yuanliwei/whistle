@@ -1,5 +1,5 @@
 # Rules
-> 所有规则参考：[规则列表](../rules/index.html)、[多种匹配模式](../pattern.html)
+> 所有规则参考：[规则列表](../rules/index.html)、[多种匹配方式](../pattern.html)
 
 规则配置界面：
 
@@ -8,7 +8,7 @@
 3. `Edit`：重命名分组
 4. `Settings`：
  - `Theme`：设置主题
- - `Font size`：设置字体大小
+ - `Font Size`：设置字体大小
  - `Show line number`：是否显示行数
  - `Allow multiple choice`：是否允许多选
  - `Disable all rules`：是否禁用所有规则，包括插件的规则

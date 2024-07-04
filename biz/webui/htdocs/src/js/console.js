@@ -47,6 +47,9 @@ function parseLog(log, expandRoot) {
       return (
         <JSONTree
           data={data}
+          onSearch={function() {
+            util.showJSONDialog(data);
+          }}
           shouldExpandNode={expandRoot ? undefined : false}
         />
       );
@@ -102,8 +105,7 @@ var Console = React.createClass({
       if (curLogs !== logs && Array.isArray(curLogs)) {
         logs.push.apply(logs, curLogs);
       }
-      state.logs = logs;
-      util.filterLogList(state.logs, self.keyword);
+      state.logs = util.filterLogList(logs, self.keyword, true);
       if (self.props.hide) {
         return;
       }
@@ -229,7 +231,7 @@ var Console = React.createClass({
     clearTimeout(self.filterTimer);
     self.filterTimer = setTimeout(function () {
       self.filterTimer = null;
-      self.setState({ consoleKeyword: consoleKeyword });
+      self.setState({});
     }, 500);
   },
   showNameInput: function (e) {
@@ -319,6 +321,7 @@ var Console = React.createClass({
     var level = state.level;
     var expandRoot = state.expandRoot;
     var disabled = !util.hasVisibleLog(logs);
+    var index = 0;
 
     return (
       <div
@@ -412,7 +415,7 @@ var Console = React.createClass({
         </form>
         <div ref="container" className="fill w-detail-log-content">
           <ul ref="logContent">
-            {logs.map(function (log) {
+            {logs.map(function (log, i) {
               var logId = log.logId;
               logId = logId ? ' (LogID: ' + logId + ')' : '';
               var date =
@@ -424,6 +427,9 @@ var Console = React.createClass({
                 log.hide || (level && !hide && log.level !== level)
                   ? ' hide'
                   : '';
+              if (!hide) {
+                ++index;
+              }
               return (
                 <li
                   key={log.id}
@@ -431,6 +437,7 @@ var Console = React.createClass({
                   className={'w-' + log.level + hide}
                 >
                   <pre>
+                    <strong>#{index}</strong>
                     {date}
                     {parseLog(log, expandRoot)}
                   </pre>

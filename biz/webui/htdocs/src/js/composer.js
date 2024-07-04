@@ -919,8 +919,7 @@ var Composer = React.createClass({
             em = status;
             util.showSystemError(xhr);
           } else if (!em || typeof em !== 'string' || em === 'error') {
-            em =
-              'Please check the proxy settings or whether whistle has been started.';
+            em = 'Please check the proxy settings or whether whistle has been started.';
           }
           state.result = { url: params.url, req: '', res: { statusCode: em } };
         } else {
@@ -1181,7 +1180,10 @@ var Composer = React.createClass({
   clearQuery: function() {
     var self = this;
     win.confirm('Are you sure to delete all params?', function(sure) {
-      sure && self.refs.paramsEditor.clear();
+      if (sure) {
+        self.refs.paramsEditor.clear();
+        self.hideParams();
+      }
     });
   },
   addQueryParam: function() {
@@ -1292,7 +1294,7 @@ var Composer = React.createClass({
       >
         <div className="fill orient-vertical-box">
           <div className="w-composer-url box">
-            <span className={'glyphicon glyphicon-header w-status-' +
+            <span className={'glyphicon glyphicon-time w-status-' +
               (showHistory ? 'show' : 'hide') + ' w-composer-history-btn'}
               title={(showHistory ? 'Hide' : 'Show') + ' history list'}
               onClick={this.toggleHistory}
@@ -1376,6 +1378,7 @@ var Composer = React.createClass({
             <PropsEditor
               ref="paramsEditor"
               onChange={this.onParamsChange}
+              callback={this.execute}
             />
           </div>
           <Divider vertical="true" leftWidth="90">
@@ -1395,14 +1398,14 @@ var Composer = React.createClass({
                   />
                   Rules
                 </label>
-                <label className="w-composer-proxy-rules" title="Rules set in Whistle">
+                <label className="w-composer-proxy-rules" title="Whether to use the Rules in Whistle?">
                   <input
                     disabled={pending}
                     type="checkbox"
                     onChange={this.onProxyRules}
                     checked={enableProxyRules}
                   />
-                  ProxyRules
+                  Whistle Rules
                 </label>
                 <label className="w-composer-pretty">
                   <input
@@ -1437,17 +1440,19 @@ var Composer = React.createClass({
                 </div>
               </div>
               <textarea
-                disabled={disableComposerRules || pending}
+                readOnly={disableComposerRules || pending}
                 defaultValue={rules}
                 ref="composerRules"
                 onChange={this.onRulesChange}
+                onDoubleClick={this.enableRules}
                 style={{
                   background:
                     !disableComposerRules && rules ? 'lightyellow' : undefined
                 }}
                 maxLength="8192"
                 className="fill orient-vertical-box w-composer-rules"
-                placeholder={'Input the rules' + (enableProxyRules ? ' (ProxyRules has higher priority)' : '')}
+                placeholder={'Input the rules (' + (enableProxyRules ? 'Use the' : 'The') +
+                  ' Rules in Whistle' + (enableProxyRules ? ' first' : ' ignored') + ')'}
               />
             </div>
             <div className="orient-vertical-box fill">
@@ -1572,6 +1577,7 @@ var Composer = React.createClass({
                     isHeader="1"
                     hide={!showPretty}
                     onChange={this.onHeaderChange}
+                    callback={this.execute}
                   />
                 </div>
                 <div className="fill orient-vertical-box w-composer-body">
@@ -1680,6 +1686,7 @@ var Composer = React.createClass({
                     ref="prettyBody"
                     hide={!showPrettyBody || isHexText || showUpload}
                     onChange={this.onFieldChange}
+                    callback={this.execute}
                   />
                   <PropsEditor
                     onDoubleClick={this.focusEnableBody}
@@ -1687,6 +1694,7 @@ var Composer = React.createClass({
                     ref="uploadBody"
                     hide={!showUpload}
                     onChange={this.onUploadFieldChange}
+                    callback={this.execute}
                     allowUploadFile
                     title={
                       hasBody
