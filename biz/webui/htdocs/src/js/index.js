@@ -1257,7 +1257,7 @@ var Index = React.createClass({
       })
       .on('keydown', function (e) {
         if ((e.metaKey || e.ctrlKey) && e.keyCode === 82) {
-          e.preventDefault();
+          // e.preventDefault();
         }
       });
     var removeItem = function (e) {
@@ -1292,7 +1292,7 @@ var Index = React.createClass({
                 '.html'
             );
           } else if (e.keyCode === 116) {
-            e.preventDefault();
+            // e.preventDefault();
           }
           return;
         }
