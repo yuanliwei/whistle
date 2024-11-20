@@ -12,8 +12,7 @@ var DNSDialog = require('./dns-servers-dialog');
 var storage = require('./storage');
 
 var dialog;
-var disabledDarkMode = storage.get('disabledDarkMode');
-disabledDarkMode = !!disabledDarkMode || (disabledDarkMode == null && util.getQuery().mode !== 'client');
+var disabledDarkMode = storage.get('disabledDarkMode') !== '';
 
 function setDiableDarkMode(flag) {
   disabledDarkMode = flag;
@@ -47,11 +46,11 @@ function getDnsOrder(verbatim) {
     return '';
   }
   var result = [
-    '<label class="w-online-option w-dns-verbatim"><input type="radio" value="1" name="dnsOrder" /> <span>Verbatim</span></label>',
-    '<label class="w-online-option w-dns-ipv4first"><input type="radio" value="2" name="dnsOrder" /> <span>IPv4-first</span></label>'
+    '<label class="w-online-option w-dns-verbatim"><input type="radio" value="1" name="dnsOrder" /> <span>Verbatim network</span></label>',
+    '<label class="w-online-option w-dns-ipv4first"><input type="radio" value="2" name="dnsOrder" /> <span>IPv4-first network</span></label>'
   ];
   if (verbatim === 2) {
-    result.push('<label class="w-online-option w-dns-ipv6first"><input type="radio" value="3" name="dnsOrder" /> <span>IPv6-first</span></label>');
+    result.push('<label class="w-online-option w-dns-ipv6first"><input type="radio" value="3" name="dnsOrder" /> <span>IPv6-first network</span></label>');
   }
   return result.join('');
 }
@@ -229,6 +228,9 @@ var Online = React.createClass({
     var port = server.realPort || server.port;
     if (port) {
       var bip = server.realHost != null ? server.realHost : server.bip;
+      if (typeof bip === 'string' && bip.indexOf(':') !== -1) {
+        bip = '[' + bip + ']';
+      }
       info.push('<h5><strong>Port:</strong> ' + (bip ? bip + ':' + port : port) + '</h5>');
     }
     if (server.socksPort) {

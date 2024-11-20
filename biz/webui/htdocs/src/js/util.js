@@ -137,6 +137,60 @@ exports.preventBlur = function preventDefault(e) {
   e.preventDefault();
 };
 
+function getSelectedText(x, y) {
+  try {
+    var selection = window.getSelection();
+    for (var i = 0, len = selection.rangeCount; i < len; i++) {
+      var range = selection.getRangeAt(i);
+      var pos = range.getBoundingClientRect();
+      x -= pos.x;
+      y -= pos.y;
+      if (x >= 0 && y >= 0 && x <= pos.width && y <= pos.height) {
+        return selection.toString();
+      }
+    }
+    selection.removeAllRanges();
+  } catch (e) {}
+}
+
+exports.getSelectedText = getSelectedText;
+
+var PROPS_MENUS = [
+  {
+    name: 'Copy'
+  },
+  {
+    name: 'Copy Key'
+  },
+  {
+    name: 'Copy Value'
+  }
+];
+
+exports.handlePropsContextMenu = function(e, ctxMenu, target) {
+  target = target ? $(target) : $(e.target).closest('tr');
+  if (!target.length) {
+    return;
+  }
+  var text = getSelectedText(e.clientX, e.clientY);
+  var key = target.attr('data-name');
+  var value = target.attr('data-value');
+  if (!text && !key && !value) {
+    return;
+  }
+  PROPS_MENUS[0].hide = !text;
+  PROPS_MENUS[1].hide = !key;
+  PROPS_MENUS[2].hide = !value;
+  PROPS_MENUS[0].copyText = text;
+  PROPS_MENUS[1].copyText = key;
+  PROPS_MENUS[2].copyText = value;
+  var height = 10 + (text ? 30 : 0) + (key ? 30 : 0) + (value ? 30 : 0);
+  var data = getMenuPosition(e, 110, height);
+  data.list = PROPS_MENUS;
+  e.preventDefault();
+  ctxMenu.show(data);
+};
+
 exports.getBase64FromHexText = function (str, check) {
   if (!str) {
     return '';
@@ -338,6 +392,12 @@ function getBoolean(val) {
 }
 
 exports.getBoolean = getBoolean;
+
+function stopPropagation(e) {
+  e.stopPropagation();
+}
+
+exports.stopPropagation = stopPropagation;
 
 exports.showSystemError = function (xhr, useToast) {
   xhr = xhr || {};
@@ -1064,7 +1124,7 @@ exports.isFocusEditor = function () {
   return !activeElement.readOnly && !activeElement.disabled;
 };
 
-exports.getMenuPosition = function (e, menuWidth, menuHeight) {
+function getMenuPosition(e, menuWidth, menuHeight) {
   var left = e.pageX;
   var top = e.pageY;
   var docElem = document.documentElement;
@@ -1076,7 +1136,9 @@ exports.getMenuPosition = function (e, menuWidth, menuHeight) {
     top = Math.max(top - menuHeight, window.scrollY + 1);
   }
   return { top: top, left: left, marginRight: clientWidth - left };
-};
+}
+
+exports.getMenuPosition = getMenuPosition;
 
 function socketIsClosed(reqData) {
   if (!reqData.closed && reqData.frames) {
@@ -1441,6 +1503,10 @@ if (window.Symbol) {
   HEX_KEY = window.Symbol.for(HEX_KEY);
   JSON_KEY = window.Symbol.for(JSON_KEY);
 }
+
+exports.BODY_KEY = BODY_KEY;
+exports.HEX_KEY = HEX_KEY;
+exports.JSON_KEY = JSON_KEY;
 
 function getHexFromBase64(base64) {
   if (base64) {
@@ -1864,8 +1930,8 @@ exports.parseImportData = function (data, modal, isValues) {
   return list;
 };
 
-exports.getSize = function (size) {
-  if (size < 1024) {
+function getSize(size) {
+  if (!(size >= 1024)) {
     return size;
   }
   size = (size / 1024).toFixed(2);
@@ -1877,7 +1943,9 @@ exports.getSize = function (size) {
     return size + 'm';
   }
   return (size / 1024).toFixed(2) + 'G';
-};
+}
+
+exports.getSize = getSize;
 
 function getQps(num) {
   if (!num) {
@@ -1962,12 +2030,11 @@ function parseMultiHeader(header) {
     name: RegExp.$1 || RegExp.$2,
     value: ''
   };
+  if (FILENAME_RE.test(header[0].replace(RegExp['$&'], '\n'))) {
+    result.value = RegExp.$1 || RegExp.$2;
+  }
   if (TYPE_RE.test(header[1])) {
     result.type = RegExp.$1;
-    var index = header[0].indexOf('name=' + RegExp['$&']);
-    if (FILENAME_RE.test(header[0].substring(index + 1))) {
-      result.value = RegExp.$1 || RegExp.$2;
-    }
   }
   return result;
 }
@@ -1976,6 +2043,18 @@ exports.isUploadForm = function (req) {
   var type = req.headers && req.headers['content-type'];
   return UPLOAD_TYPE_RE.test(type);
 };
+
+function getUploadName(header) {
+  var result = [];
+  if (header.value) {
+    result.push(header.value);
+  }
+  if (header.type) {
+    result.push(header.type);
+  }
+  result = result.join('; ');
+  return header.name + (result ? '\r\u0000(' + result + ')' : '');
+}
 
 function parseUploadBody(body, boundary, needObj) {
   var sep = '--' + boundary;
@@ -1986,7 +2065,7 @@ function parseUploadBody(body, boundary, needObj) {
   var result = needObj ? {} : [];
   while (index >= 0) {
     index += len;
-    var hIndex = indexOfList(body, BODY_SEP, index);
+    var hIndex = indexOfList(body, BODY_SEP, index - 2);
     if (hIndex === -1) {
       return result;
     }
@@ -1997,10 +2076,10 @@ function parseUploadBody(body, boundary, needObj) {
     var header = body.slice(index, hIndex);
     hIndex += 4;
     var data = hIndex >= endIndex ? '' : body.slice(hIndex, endIndex);
-    header = parseMultiHeader(header);
+    header = header && parseMultiHeader(header);
     if (header) {
       if (needObj) {
-        var name = header.name + (header.type ? ' (' + header.type + ')' : '');
+        var name = getUploadName(header);
         var curVal = header.value;
         if (data) {
           try {
@@ -2614,23 +2693,14 @@ exports.replacQuery = function(url, query) {
   return url + query + hash;
 };
 
-function getDisplaySize(size) {
-  if (!(size > 1024)) {
-    return size;
-  }
-  return Number(size / 1024).toFixed(2) + 'k';
-}
-
 exports.getDisplaySize = function(size, unzipSize) {
-  unzipSize = size == unzipSize ? '' : getDisplaySize(unzipSize);
-  size = getDisplaySize(size);
+  unzipSize = size == unzipSize ? '' : getSize(unzipSize);
+  size = getSize(size);
   return unzipSize ? size + ' / ' + unzipSize : size;
 };
 
 function formatSize(value) {
-  return value >= 1024
-    ? value + ' (' + Number(value / 1024).toFixed(2) + 'k)'
-    : value;
+  return value >= 1024 ? value + ' (' + getSize(value) + ')' : value;
 }
 
 exports.formatSize = function(size, unzipSize) {
@@ -2653,9 +2723,9 @@ exports.getSimplePluginName = function(plugin) {
   return name.substring(name.lastIndexOf('.') + 1);
 };
 
-exports.showJSONDialog = function(data) {
+exports.showJSONDialog = function(data, keyPath) {
   var str = data && JSON.stringify(data);
   if (str) {
-    events.trigger('showJsonViewDialog', str);
+    events.trigger('showJsonViewDialog', [str, Array.isArray(keyPath) ? keyPath : null]);
   }
 };

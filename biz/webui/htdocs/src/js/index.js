@@ -57,7 +57,9 @@ var OPTIONS_WITH_SELECTED = [
 ];
 var HIDE_STYLE = { display: 'none' };
 var search = window.location.search;
-var isClient = util.getQuery().mode === 'client';
+var query = util.getQuery();
+var isClient = query.mode === 'client';
+var hideMenus = !!(query.hideMenus || query.hideMenu);
 var hideLeftMenu;
 var showTreeView;
 var dataUrl;
@@ -412,6 +414,13 @@ function updateData(list, data, modal) {
   return hasChanged;
 }
 
+function getCAType(type) {
+  if (type === 'crt' || type === 'pem') {
+    return type;
+  }
+  return 'cer';
+}
+
 var Index = React.createClass({
   getInitialState: function () {
     var self = this;
@@ -420,14 +429,10 @@ var Index = React.createClass({
     var values = modal.values;
     var server = modal.server;
     var multiEnv = !!server.multiEnv;
-    var caType = storage.get('caType');
-    if (caType !== 'cer' && caType !== 'pem') {
-      caType = 'crt';
-    }
     var state = {
       replayCount: 1,
       tabs: [],
-      caType: caType,
+      caType: getCAType(storage.get('caType')),
       allowMultipleChoice: modal.rules.allowMultipleChoice,
       backRulesFirst: modal.rules.backRulesFirst,
       networkMode: !!server.networkMode,
@@ -1016,8 +1021,8 @@ var Index = React.createClass({
     events.on('enableRecord', function () {
       self.enableRecord();
     });
-    events.on('showJsonViewDialog', function(_, data) {
-      self.refs.jsonDialog.show(data);
+    events.on('showJsonViewDialog', function(_, data, keyPath) {
+      self.refs.jsonDialog.show(data, keyPath);
     });
     events.on('rulesChanged', function (_, force) {
       self.rulesChanged = true;
@@ -1255,10 +1260,18 @@ var Index = React.createClass({
           }
         });
       })
-      .on('keydown', function (e) {
+      .on('keyup', function (e) {
         if ((e.metaKey || e.ctrlKey) && e.keyCode === 82) {
           // e.preventDefault();
+        } else if (self.state.name == 'network' &&  e.keyCode === 191) {
+          var nodeName = document.activeElement && document.activeElement.nodeName;
+          if (nodeName !== 'INPUT' && nodeName !== 'TEXTAREA' && !$('.modal.in').length) {
+            events.trigger('focusNetworkFilterInput');
+          }
         }
+      })
+      .on('contextmenu', '.w-textarea-bar', function(e) {
+        e.preventDefault();
       });
     var removeItem = function (e) {
       var target = e.target;
@@ -1729,6 +1742,16 @@ var Index = React.createClass({
     try {
       var onReady = window.parent.onWhistleReady;
       if (typeof onReady === 'function') {
+        var selectItem = function(item) {
+          var modal = item && self.state.network;
+          var index = modal && modal.getList().indexOf(item);
+          if (index >= 0) {
+            events.trigger('selectedIndex', index);
+          }
+        };
+        var selectIndex = function (index) {
+          events.trigger('selectedIndex', index);
+        };
         onReady({
           url: location.href,
           pageId: dataCenter.getPageId(),
@@ -1736,8 +1759,14 @@ var Index = React.createClass({
           importSessions: self.importAnySessions,
           importHarSessions: self.importHarSessions,
           clearSessions: self.clear,
-          selectIndex: function (index) {
-            events.trigger('selectedIndex', index);
+          selectIndex: selectIndex,
+          selectItem: selectItem,
+          setActive: function(item) {
+            if (item >= 0) {
+              selectIndex(item);
+            } else {
+              selectItem(item);
+            }
           }
         });
       }
@@ -3266,24 +3295,24 @@ var Index = React.createClass({
     var self = this;
     var state = self.state;
     var list;
-    // var isRules = state.name == 'rules';
-    // if (isRules) {
-    list = state.rules.getChangedList();
-    if (list.length) {
-      list.forEach(function (item) {
-        self.selectRules(item);
-      });
-      self.setState({});
-    }
-    // } else {
-    list = state.values.getChangedList();
-    if (list.length) {
-      list.forEach(function (item) {
-        self.saveValues(item);
-      });
-      self.setState({});
-    }
-    // }
+      list = state.rules.getChangedList();
+      var active = state.rules.getActive();
+      if (active && !active.selected && list.indexOf(active) === -1) {
+        list.push(active);
+      }
+      if (list.length) {
+        list.forEach(function (item) {
+          self.selectRules(item);
+        });
+        self.setState({});
+      }
+      list = state.values.getChangedList();
+      if (list.length) {
+        list.forEach(function (item) {
+          self.saveValues(item);
+        });
+        self.setState({});
+      }
   },
   onClickMenu: function (e) {
     var target = $(e.target).closest('a');
@@ -3871,10 +3900,7 @@ var Index = React.createClass({
     }, 200);
   },
   selectCAType: function(e) {
-    var caType = e.target.value;
-    if (caType !== 'cer' && caType !== 'pem') {
-      caType = 'crt';
-    }
+    var caType = getCAType(e.target.value);
     this.setState({ caType: caType });
     storage.set('caType', caType);
   },
@@ -4073,17 +4099,17 @@ var Index = React.createClass({
     LEFT_BAR_MENUS[4].hide = rulesOnlyMode;
 
     var caType = state.caType || 'crt';
-    var qrCode = 'img/qrcode.png';
+    var qrCode = 'img/qrcode-' + caType + '.png';
     var caUrl = 'cgi-bin/rootca';
     var caShortUrl = 'http://rootca.pro/';
 
-    if (caType !== 'crt') {
-      qrCode = 'img/qrcode-' + caType + '.png';
+    if (caType !== 'cer') {
       caUrl += '?type=' + caType;
       caShortUrl += caType;
     }
     var hideEditor = this.isHideRules();
     var hideEditorStyle = hideEditor ? HIDE_STYLE : null;
+    var hideStyle = hideMenus ? ' hide' : '';
     dataCenter.hideMockMenu = hideEditor;
 
     return (
@@ -4095,7 +4121,7 @@ var Index = React.createClass({
           + (rulesOnlyMode || rulesMode ? ' w-show-rules-mode' : '')
         }
       >
-        <div className={'w-menu w-' + name + '-menu-list'} onContextMenu={this.onTopContextMenu}>
+        <div className={'w-menu w-' + name + '-menu-list' + hideStyle} onContextMenu={this.onTopContextMenu}>
           <a
             onClick={this.toggleLeftMenu}
             draggable="false"
@@ -4310,7 +4336,7 @@ var Index = React.createClass({
             draggable="false"
           >
             <span className="glyphicon glyphicon-download-alt" />
-            {dataCenter.enablePluginMgr ? 'Install' : 'ReinstallAll'}
+            {dataCenter.enablePluginMgr ? 'Install' : 'Commands'}
           </a>
           <RecordBtn
             ref="recordBtn"
@@ -4640,7 +4666,7 @@ var Index = React.createClass({
             onContextMenu={this.onContextMenu}
             onDoubleClick={this.onContextMenu}
             className={
-              'w-left-menu' + (forceShowLeftMenu ? ' w-hover-left-menu' : '')
+              'w-left-menu' + (forceShowLeftMenu ? ' w-hover-left-menu' : '') + hideStyle
             }
             style={(!showAccount && networkMode) || mustHideLeftMenu ? HIDE_STYLE : null}
             onMouseEnter={forceShowLeftMenu}
@@ -4944,7 +4970,7 @@ var Index = React.createClass({
                   href={caUrl}
                   target="downloadTargetFrame"
                 >
-                  <img src={qrCode} width="320" />
+                  <img src={qrCode} width="300" style={{margin: 10}} />
                 </a>
                 <div className="w-https-settings">
                   <p>
