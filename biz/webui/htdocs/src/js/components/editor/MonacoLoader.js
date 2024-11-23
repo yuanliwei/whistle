@@ -19,16 +19,16 @@ function loadScript(resolve, path, name) {
     node.src = path + name
     node.onload = () => {
         /** @type{any} */
-        let require = window['require']
-        if (require?.config && scriptNodes) {
+        let requireFn = window['require']
+        if (requireFn?.config && scriptNodes) {
             console.log('path', path)
-            require.config({ paths: { 'vs': path } })
+            requireFn.config({ paths: { 'vs': path } })
             scriptNodes.filter(o => o != node).forEach(o => {
                 o.src = ''
                 o.remove()
             })
             scriptNodes = null
-            resolve(require)
+            resolve(requireFn)
             localStorage.setItem(KEY_LAST_CDN_NODE, [path, name].join('{#}'))
         }
     }
@@ -47,7 +47,7 @@ async function getRequireLoader() {
         loadScript(resolve, 'https://lib.baomitu.com/monaco-editor/0.50.0/min/vs', '/loader.js')
         loadScript(resolve, 'https://cdn.bootcdn.net/ajax/libs/monaco-editor/0.50.0/min/vs', '/loader.js')
         loadScript(resolve, 'https://cdn.jsdelivr.net/npm/monaco-editor@0.50.0/min/vs', '/loader.js')
-        loadScript(resolve, 'https://microsoft.github.io/monaco-editor/node_modules/monaco-editor/min/vs', '/loader.js')
+        // loadScript(resolve, 'https://microsoft.github.io/monaco-editor/node_modules/monaco-editor/min/vs', '/loader.js')
         loadScript(resolve, 'https://unpkg.com/monaco-editor@0.50.0/min/vs', '/loader.js')
         loadScript(resolve, 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.50.0/min/vs', '/loader.js')
     })
@@ -72,6 +72,8 @@ export async function loadMonaco() {
     })
     return monacoPromise
 }
+
+export { loadMonaco as load }
 
 export default {
     load: loadMonaco
