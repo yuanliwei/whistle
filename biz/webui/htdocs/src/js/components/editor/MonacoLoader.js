@@ -63,8 +63,8 @@ export async function loadMonaco() {
     if (monacoPromise) return monacoPromise
     monacoPromise = new Promise((resolve) => {
         (async () => {
-            let require = await getRequireLoader()
-            require(['vs/editor/editor.main'], () => {
+            let requireLoader = await getRequireLoader()
+            requireLoader(['vs/editor/editor.main'], () => {
                 const monaco = window['monaco']
                 resolve(monaco)
             })
