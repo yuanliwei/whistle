@@ -17,16 +17,30 @@ var dragCallbacks = {};
 var dragTarget, dragOffset, dragCallback;
 var logTempId = 0;
 var RAW_CRLF_RE = /\\n|\\r/g;
-var NUM_RE = /^\d+$/;
-var DIG_RE = /^[+-]?[1-9]\d*$/;
-var INDEX_RE = /^\[(\d+)\]$/;
-var ARR_FILED_RE = /(.)?(?:\[(\d+)\])$/;
 var LEVELS = ['fatal', 'error', 'warn', 'info', 'debug'];
 var MAX_CURL_BODY = 1024 * 72;
 var search = (window.location.search || '').substring(1);
 var useCustomEditor = search.indexOf('useCustomEditor') !== -1;
 var JSON_RE = /^\s*(?:\{[\w\W]*\}|\[[\w\W]*\])\s*$/;
 var isJSONText;
+var MAX_SAFE_INTEGER = (Number.MAX_SAFE_INTEGER || '9007199254740991') + '';
+var MIN_SAFE_INTEGER = Math.abs(Number.MIN_SAFE_INTEGER || '9007199254740991') + '';
+var DIG_RE = /^([+-]?)([1-9]\d{0,15})$/;
+
+function isSafeNumStr(str) {
+  if (str == '0') {
+    return true;
+  }
+  if (!DIG_RE.test(str)) {
+    return false;
+  }
+  var sign = RegExp.$1 === '-';
+  var num = RegExp.$2;
+  if (num.length < 16) {
+    return true;
+  }
+  return num <= (sign ? MIN_SAFE_INTEGER : MAX_SAFE_INTEGER);
+}
 
 function replaceCrLf(char) {
   return char === '\\r' ? '\r' : '\n';
@@ -191,28 +205,25 @@ exports.handlePropsContextMenu = function(e, ctxMenu, target) {
   ctxMenu.show(data);
 };
 
-exports.getBase64FromHexText = function (str, check) {
+var NO_HEX_RE = /[^\da-f]+/ig;
+
+exports.getBase64FromHexText = function (str) {
+  str = str && str.trim().replace(NO_HEX_RE, '');
   if (!str) {
     return '';
   }
-  if (/[^\da-f\s]/i.test(str)) {
-    return false;
-  }
-  str = str.replace(/\s+/g, '');
   var len = str.length;
-  if (len % 2 === 1) {
-    return false;
+  if (len % 2) {
+    str += '0';
   }
-  if (check) {
-    return true;
+  var result = [];
+  for (var i = 0; i < len; i += 2) {
+    result.push(parseInt(str.substring(i, i + 2), 16));
   }
-  str = str.match(/../g).map(function (char) {
-    return parseInt(char, 16);
-  });
   try {
-    return fromByteArray(str);
+    return fromByteArray(result);
   } catch (e) {}
-  return false;
+  return '';
 };
 
 function stopDrag() {
@@ -717,117 +728,84 @@ function parseJSON(str, resolve) {
 
 exports.parseJSON = parseJSON;
 
+function isNum(n) {
+  return typeof n === 'number';
+}
+
+function parseLine(line) {
+  var index = line.indexOf(': ');
+  if (index === -1) {
+    index = line.indexOf(':');
+    if (index === -1) {
+      index = line.indexOf('=');
+    }
+  }
+  var name, value;
+  if (index != -1) {
+    name = line.substring(0, index).trim();
+    value = line.substring(index + 1).trim();
+    if (value) {
+      var fv = value[0];
+      var lv = value[value.length - 1];
+      if (fv === lv) {
+        if (fv === '"' || fv === '\'' || fv === '`') {
+          value = value.slice(1, -1);
+          if (value && fv === '`') {
+            value = value.replace(RAW_CRLF_RE, replaceCrLf);
+          }
+        }
+      } else if (isSafeNumStr(value)) {
+        value = parseInt(value, 10);
+      }
+    }
+  } else {
+    name = line.trim();
+    value = '';
+  }
+  return {
+    name: name,
+    value: value
+  };
+}
+
 function parseLinesJSON(text) {
   if (typeof text !== 'string' || !(text = text.trim())) {
     return null;
   }
-  var first = text[0];
-  var last = text[text.length - 1];
-  if ((first === '[' && last === ']') || (first === '{' && last === '}')) {
-    return null;
-  }
   var result;
-  text.split(/\r\n|\n|\r/g).forEach(function (line) {
+  text.split(/\r\n|\n|\r/).forEach(function(line) {
     if (!(line = line.trim())) {
       return;
     }
-    var index = line.indexOf(': ');
-    if (index === -1) {
-      index = line.indexOf(':');
-    }
-    var name, value, arrIndex;
-    if (index != -1) {
-      name = line.substring(0, index).trim();
-      value = line.substring(index + 1).trim();
-      if (value) {
-        var fv = value[0];
-        var lv = value[value.length - 1];
-        if (fv === lv) {
-          if (fv === '"' || fv === '\'' || fv === '`') {
-            value = value.slice(1, -1);
-          }
-          if (
-            value &&
-            fv === '`' &&
-            (value.indexOf('\\n') !== -1 || value.indexOf('\\r') !== -1)
-          ) {
-            value = value.replace(RAW_CRLF_RE, replaceCrLf);
-          }
-        } else if (value === '0') {
-          value = 0;
-        } else if (value.length < 16 && DIG_RE.test(value)) {
-          try {
-            value = parseInt(value, 10);
-          } catch (e) {}
-        }
-      }
-    } else {
-      name = line.trim();
-      value = '';
-    }
-    first = name[0];
-    last = name[name.length - 1];
-    if (first === last && last === '"') {
-      name = name.slice(1, -1);
-    } else if (first === '[' && last === ']') {
-      name = name.slice(1, -1).trim();
-      if (NUM_RE.test(name) || INDEX_RE.test(name)) {
-        name = RegExp.$1 || RegExp['$&'];
+    var obj = parseLine(line);
+    var name = obj.name;
+    var value = obj.value;
+    var isKey = !Array.isArray(name);
+    if (isKey || name.length <= 1) {
+      if (isKey) {
+        result = result || {};
+      } else {
+        name = name[0];
         result = result || [];
-      } else {
-        var keys = name.split(/\s*\.\s*/);
-        name = keys.shift().trim();
-        if (ARR_FILED_RE.test(name)) {
-          var idx = RegExp.$2;
-          if (RegExp.$1) {
-            name = name.slice(0, -idx.length - 2);
-            arrIndex = idx;
-          } else {
-            name = idx;
-            result = result || [];
-          }
-        }
-        if (keys.length) {
-          keys.reverse().forEach(function (key) {
-            var obj;
-            if (ARR_FILED_RE.test(key)) {
-              var idx2 = RegExp.$2;
-              var arr = [];
-              if (RegExp.$1) {
-                obj = {};
-                obj[key.slice(0, -idx2.length - 2)] = arr;
-                arr[idx2] = value;
-                value = obj;
-              } else {
-                arr[idx2] = value;
-                value = arr;
-              }
-            } else {
-              obj = {};
-              obj[key] = value;
-              value = obj;
-            }
-          });
-        }
       }
+      result[name] = value;
+      return;
     }
-    result = result || {};
-    var list = result[name];
-    if (list == null) {
-      if (arrIndex) {
-        var arr = [];
-        arr[arrIndex] = value;
-        result[name] = arr;
-      } else {
-        result[name] = value;
+    result = result || (isNum(name[0]) ? [] : {});
+    obj = result;
+    var lastIndex = name.length - 1;
+    name.forEach(function(key, i) {
+      if (i === lastIndex) {
+        obj[key] = value;
+        return;
       }
-    } else if (typeof list === 'object') {
-      if (arrIndex) {
-        list[arrIndex] = value;
-      } else if (typeof value === 'object') {
-        $.extend(true, list, value);
+      var next = obj[key];
+      if (!next || typeof next !== 'object') {
+        next = isNum(name[i + 1]) ? [] : {};
       }
-    }
+      obj[key] = next;
+      obj = next;
+    });
   });
   return result || {};
 }
@@ -1465,6 +1443,8 @@ function base64toBytes(base64) {
   return [];
 }
 
+exports.base64Decode = base64Decode;
+
 function decodeBase64(base64) {
   var arr = base64toBytes(base64);
   var result = {
@@ -1994,6 +1974,8 @@ function concatByteArray(list1, list2, list3) {
   return result;
 }
 
+exports.toBase64 = toBase64;
+
 function strToByteArray(str) {
   try {
     str = toBase64(str);
@@ -2009,6 +1991,8 @@ function base64ToByteArray(str) {
   return null;
 }
 
+exports.base64ToByteArray = base64ToByteArray;
+
 var UPLOAD_TYPE_RE = /^\s*multipart\//i;
 var BOUNDARY_RE = /boundary=(?:"([^"]+)"|([^;]+))/i;
 var BODY_SEP = strToByteArray('\r\n\r\n');
@@ -2016,6 +2000,9 @@ var NAME_RE = /name=(?:"([^"]+)"|([^;]+))/i;
 var FILENAME_RE = /filename=(?:"([^"]+)"|([^;]+))/i;
 var TYPE_RE = /^\s*content-type:\s*([^\s]+)/i;
 var CRLF_BUF = strToByteArray('\r\n');
+var EMPTY_BUF = strToByteArray('');
+
+exports.EMPTY_BUF = EMPTY_BUF;
 
 function parseMultiHeader(header) {
   try {
@@ -2099,7 +2086,7 @@ function parseUploadBody(body, boundary, needObj) {
         }
       } else {
         if (header.type) {
-          header.data = data;
+          header.data = data || EMPTY_BUF;
         } else {
           try {
             header.value = data && base64Decode(fromByteArray(data));
@@ -2245,6 +2232,8 @@ function bytesToBase64(bytes) {
   }
   return result;
 }
+
+exports.bytesToBase64 = bytesToBase64;
 
 exports.getMultiBody = function (fields) {
   var result;
